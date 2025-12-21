@@ -1,0 +1,44 @@
+pipelines:
+  pg_to_parquet_local:
+    source:
+      type: postgres
+      name: pgsrc
+      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD"
+      object: "public.my_table"   # or query: "SELECT ..."
+
+    target:
+      type: parquet
+      path: "./out/my_table.parquet"
+      mode: overwrite             # overwrite|append (append needs dataset-style layout)
+      compression: zstd
+
+    options:
+      threads: 8
+      memory_limit: "4GB"
+      sample_rows: 200
+
+  parquet_to_pg:
+    source:
+      type: parquet
+      path: "./out/my_table.parquet"
+
+    target:
+      type: postgres
+      name: pgtgt
+      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD"
+      table: "public.my_table_copy"
+      mode: overwrite             # overwrite|append
+
+  snowflake_to_parquet:
+     source:
+       type: snowflake
+       # Example using password auth. For keypair/browser, the conn string differs.
+       # DuckDB snowflake extension uses standard connection string parameters.
+       conn: "user=myuser password=__ENV:SF_PASSWORD account=myaccount warehouse=mywh database=mydb schema=public"
+       object: "mydb.public.mytable" 
+     
+     target:
+       type: parquet
+       path: "./out/sf_dump.parquet"
+       mode: overwrite
+
