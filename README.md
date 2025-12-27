@@ -47,12 +47,12 @@ flowchart LR
 
 ### Key Components
 
-*   **Sources**: Data can be ingested from relational databases (**Postgres**, **Snowflake**) or Files (**Parquet**) residing on **S3** or the **Local Filesystem**.
+*   **Sources**: Data can be ingested from relational databases (**Postgres**, **Snowflake**) or Parquet files residing on the **Local Filesystem** or **AWS S3**.
 *   **DuckDB Engine**:
     *   **Attach / Read**: Uses DuckDB's `ATTACH` feature or direct file reading to access source data without moving it entirely into memory.
     *   **Count & Sample**: Performs efficient metadata operations and data sampling.
     *   **Write / Copy**: Writes the data to the destination using standard SQL (`COPY`, `CREATE TABLE`).
-*   **Targets**: Output can be directed back to databases or dumped as Parquet files (locally or to S3).
+*   **Targets**: Output can be directed back to databases or dumped as Parquet files to the **Local Filesystem** or **AWS S3**.
 
 ## Setup
 
@@ -70,6 +70,15 @@ flowchart LR
 
 3.  **Configure Environment**:
     Set up necessary environment variables for database connections (e.g., `PG_PASSWORD`, `SF_PASSWORD`) as referenced in `pipelines.yml`.
+
+### S3 Configuration
+
+To read from or write to S3, you need to configure your AWS credentials. The recommended approach is to use an IAM role attached to the environment where DuckEL is running.
+
+If you are not using an IAM role, you can set the following environment variables:
+- `AWS_REGION`: The AWS region of your S3 bucket (e.g., `us-east-1`).
+- `AWS_ACCESS_KEY_ID`: Your AWS access key.
+- `AWS_SECRET_ACCESS_KEY`: Your AWS secret key.
 
 ## Usage
 
