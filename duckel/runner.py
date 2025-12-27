@@ -1,4 +1,5 @@
 import time
+import os
 from .engine import make_con, resolve_env_tokens
 from .adapters import build_source_relation_sql, build_target_write_sql
 
@@ -79,6 +80,12 @@ def run_pipeline(p: dict, overrides: dict = None) -> dict:
     if opts.get("compute_summary", False):
         summary = con.execute(f"SUMMARIZE SELECT * FROM {relation_sql};").fetchdf()
         t_summary = time.perf_counter()
+
+    # Ensure target directory exists for file-based targets
+    if "path" in target:
+        out_dir = os.path.dirname(target["path"])
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
 
     write_sql = build_target_write_sql(target, relation_sql)
     con.execute(write_sql)
