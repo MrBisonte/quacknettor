@@ -23,7 +23,7 @@ data = {
 df = pd.DataFrame(data)
 
 # Save to Parquet
-output_path = "data/telco_churn_sample.parquet"
+output_path = "data/inbound/telco_churn_sample.parquet"
 df.to_parquet(output_path, engine="pyarrow")
 
 print(f"Generated {output_path} with {n_rows} rows and {len(df.columns)} columns.")

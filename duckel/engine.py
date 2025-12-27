@@ -13,9 +13,11 @@ def resolve_env_tokens(s: str) -> str:
 
 def make_con(db_path=":memory:", threads=4, memory_limit="2GB"):
     con = duckdb.connect(db_path)
-    con.execute("INSTALL postgres; LOAD postgres;")  # ok even if already installed
-    con.execute("INSTALL httpfs; LOAD httpfs;")      # for S3 later
-    con.execute("INSTALL snowflake; LOAD snowflake;")
+    for ext in ["postgres", "httpfs", "snowflake"]:
+        try:
+            con.execute(f"INSTALL {ext}; LOAD {ext};")
+        except Exception as e:
+            print(f"Warning: Could not load extension {ext}: {e}")
     con.execute(f"PRAGMA threads={int(threads)};")
     con.execute(f"SET memory_limit='{memory_limit}';")
     return con

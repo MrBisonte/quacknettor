@@ -41,4 +41,15 @@ pipelines:
        type: parquet
        path: "./out/sf_dump.parquet"
        mode: overwrite
+ 
+  local_parquet_to_parquet:
+    source:
+      type: parquet
+      path: "./data/inbound/telco_churn_sample.parquet"
+    
+    target:
+      type: parquet
+      path: "./data/outbound/telco_churn_copy.parquet"
+      mode: overwrite
+
 
