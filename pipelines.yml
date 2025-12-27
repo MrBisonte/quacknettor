@@ -52,4 +52,23 @@ pipelines:
       path: "./data/outbound/telco_churn_copy.parquet"
       mode: overwrite
 
+  s3_to_local_parquet:
+    source:
+      type: parquet
+      path: "s3://my-bucket/in/telco_churn_sample.parquet"
+
+    target:
+      type: parquet
+      path: "./data/outbound/s3_telco_churn_copy.parquet"
+      mode: overwrite
+
+  local_to_s3_parquet:
+    source:
+      type: parquet
+      path: "./data/inbound/telco_churn_sample.parquet"
+
+    target:
+      type: parquet
+      path: "s3://my-bucket/out/telco_churn_copy.parquet"
+      mode: overwrite
 
