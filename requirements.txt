@@ -3,3 +3,4 @@ pyyaml
 streamlit
 pandas
 watchdog
+requests

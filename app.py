@@ -72,60 +72,80 @@ if target_cfg["type"] == "postgres":
                                         placeholder="e.g. public.test_table_v2",
                                         help="Override the destination table name defined in config.")
 
-if st.button("Run Pipeline", type="primary"):
-    # Construct runtime pipeline definition
-    p = {
-        "source": source_cfg,
-        "target": target_cfg,
-        "options": {
-             "threads": 4, 
-             "memory_limit": "2GB",
-             "sample_rows": sample_rows
+# --- TABS ---
+tab1, tab2 = st.tabs(["Run Pipeline", "AI Assistant (Jules)"])
+
+with tab1:
+    if st.button("Run Pipeline", type="primary"):
+        # Construct runtime pipeline definition
+        p = {
+            "source": source_cfg,
+            "target": target_cfg,
+            "options": {
+                 "threads": 4, 
+                 "memory_limit": "2GB",
+                 "sample_rows": sample_rows
+            }
         }
-    }
 
-    overrides = {
-        "compute_counts": compute_counts,
-        "sample_data": sample_data,
-        "sample_rows": sample_rows,
-        "compute_summary": compute_summary
-    }
+        overrides = {
+            "compute_counts": compute_counts,
+            "sample_data": sample_data,
+            "sample_rows": sample_rows,
+            "compute_summary": compute_summary
+        }
+        
+        if target_table_override:
+            overrides["target_table"] = target_table_override
+        
+        with st.spinner("Running pipeline..."):
+            try:
+                result = run_pipeline(p, overrides=overrides)
+            except Exception as e:
+                st.error(f"Pipeline failed: {e}")
+                result = None
+
+        if result:
+            st.success(f"Done, {result['rows']:,} rows")
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Count (s)", result["timings"]["count_s"])
+            c2.metric("Sample (s)", result["timings"]["sample_s"])
+            c3.metric("Write (s)", result["timings"]["write_s"])
+            c4.metric("Total (s)", result["timings"]["total_s"])
+
+            if result.get("sample") is not None:
+                st.subheader("Sample preview")
+                st.dataframe(result["sample"], width="stretch")
+
+            if result.get("summary") is not None:
+                st.subheader("Data Summary")
+                st.dataframe(result["summary"], width="stretch")
+
+            st.subheader("Write SQL")
+            st.code(result["write_sql"], language="sql")
+
+with tab2:
+    st.header("Ask Jules 🤖")
+    st.markdown("Use Google's AI Agent to help you generate pipelines or debug issues.")
     
-    if target_table_override:
-        overrides["target_table"] = target_table_override
+    # Import here to avoid hard dependency at top
+    from duckel.jules import JulesClient
+    jules = JulesClient()
     
-    with st.spinner("Running pipeline..."):
-        try:
-            result = run_pipeline(p, overrides=overrides)
-            # Wait, looking at previous app.py, run_pipeline was called with overrides=overrides in my view, 
-            # but I don't see overrides in runner.py signature in my memory or previous view.
-            # Let's re-read runner.py if needed, or just pass 'p' as configured.
-            
-            # The runner.py I saw earlier:
-            # def run_pipeline(p: dict) -> dict:
-            #   opts = p.get("options", {})
-            # ...
-            # So I should put options IN p.
-        except Exception as e:
-            st.error(f"Pipeline failed: {e}")
-            result = None
-
-    if result:
-        st.success(f"Done, {result['rows']:,} rows")
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Count (s)", result["timings"]["count_s"])
-        c2.metric("Sample (s)", result["timings"]["sample_s"])
-        c3.metric("Write (s)", result["timings"]["write_s"])
-        c4.metric("Total (s)", result["timings"]["total_s"])
-
-        if result.get("sample") is not None:
-            st.subheader("Sample preview")
-            st.dataframe(result["sample"], width="stretch")
-
-        if result.get("summary") is not None:
-            st.subheader("Data Summary")
-            st.dataframe(result["summary"], width="stretch")
-
-        st.subheader("Write SQL")
-        st.code(result["write_sql"], language="sql")
+    if not jules.is_configured():
+        st.warning("⚠️ JULES_API_KEY not found. Please export it to start a session.")
+        st.code("export JULES_API_KEY=AQ.Ab8RN6LMCi8s6pmlHxHK09nQ6HPGboxddpI6KA0cnfTn3CoQlQ", language="bash")
+    else:
+        prompt = st.text_area("What do you want to do?", placeholder="e.g., Create a pipeline to read from S3 bucket 'my-data' and load into Postgres.")
+        
+        if st.button("Ask Jules"):
+            with st.spinner("Jules is thinking..."):
+                session = jules.create_session(prompt)
+                
+                if "error" in session:
+                    st.error(f"Error: {session['error']}")
+                else:
+                    st.success(f"Session Started: {session['name']}")
+                    st.json(session)
+                    st.balloons()
