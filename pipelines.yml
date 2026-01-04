@@ -6,7 +6,7 @@ sources:
     conn: "dbname=__ENV:PG_DATABASE user=__ENV:PG_USER host=__ENV:PG_HOST port=5432 password=__ENV:PG_PASSWORD"
     object: "public.my_table"
 
-  parquet_local_in:
+  demo_parquet_in:
     type: parquet
     path: "./data/inbound/telco_churn_sample.parquet"
 
