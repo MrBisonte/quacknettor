@@ -151,6 +151,18 @@ Once connections are verified, you can run the main Streamlit application.
     -   A preview sample of the data.
     -   The generated SQL used for writing.
 
+4.  **AI Assistant (Jules)**:
+    Switch to the "AI Assistant" tab to ask **Google Jules** to help you generate pipeline configurations or debug issues.
+    *Requires `JULES_API_KEY` to be set.*
+
+## Deployment & Sharing
+
+To share this application with others (e.g. for a POC), refer to [DEPLOY.md](DEPLOY.md).
+It covers:
+*   **Instant Sharing** via `ngrok`.
+*   **Persistent Deployment** via Streamlit Community Cloud.
+*   **Demo Mode**: Using the `demo_parquet_in` source for users without database access.
+
 ## Project Structure
 
 *   `app.py`: Main Streamlit application entry point.

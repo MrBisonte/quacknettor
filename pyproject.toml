@@ -1,7 +1,7 @@
 [project]
 name = "quacknettor"
-version = "1.0.1"
-description = "DuckEL: DuckDB-powered Extract + Load POC"
+version = "1.1.0"
+description = "A DuckDB-powered Extract & Load framework with Streamlit UI and AI Assistant."
 authors = [
     {name = "User", email = "user@example.com"},
 ]
