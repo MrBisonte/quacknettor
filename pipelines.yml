@@ -1,8 +1,8 @@
-sources:
   pg_local:
     type: postgres
     name: pgsrc
-    conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD"
+    # Fully configurable via environment variables
+    conn: "dbname=__ENV:PG_DATABASE user=__ENV:PG_USER host=__ENV:PG_HOST port=5432 password=__ENV:PG_PASSWORD"
     object: "public.my_table"
 
   parquet_local_in:
@@ -25,7 +25,7 @@ targets:
   pg_local_out:
     type: postgres
     name: pgtgt
-    conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD"
+    conn: "dbname=__ENV:PG_DATABASE user=__ENV:PG_USER host=__ENV:PG_HOST port=5432 password=__ENV:PG_PASSWORD"
     table: "public.my_table_copy"
     mode: overwrite
 

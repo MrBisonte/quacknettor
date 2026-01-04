@@ -62,6 +62,15 @@ with c_run2:
 
 with c_run3:
     compute_summary = st.checkbox("Summarize Data", value=False)
+    
+st.write("") # Spacer
+
+# Dynamic overrides based on target type
+target_table_override = None
+if target_cfg["type"] == "postgres":
+    target_table_override = st.text_input("Target Table Override (Optional)", 
+                                        placeholder="e.g. public.test_table_v2",
+                                        help="Override the destination table name defined in config.")
 
 if st.button("Run Pipeline", type="primary"):
     # Construct runtime pipeline definition
@@ -81,6 +90,9 @@ if st.button("Run Pipeline", type="primary"):
         "sample_rows": sample_rows,
         "compute_summary": compute_summary
     }
+    
+    if target_table_override:
+        overrides["target_table"] = target_table_override
     
     with st.spinner("Running pipeline..."):
         try:
@@ -109,11 +121,11 @@ if st.button("Run Pipeline", type="primary"):
 
         if result.get("sample") is not None:
             st.subheader("Sample preview")
-            st.dataframe(result["sample"], use_container_width=True)
+            st.dataframe(result["sample"], width="stretch")
 
         if result.get("summary") is not None:
             st.subheader("Data Summary")
-            st.dataframe(result["summary"], use_container_width=True)
+            st.dataframe(result["summary"], width="stretch")
 
         st.subheader("Write SQL")
         st.code(result["write_sql"], language="sql")

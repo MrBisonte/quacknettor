@@ -1,4 +1,12 @@
-def build_source_relation_sql(source: dict) -> str:
+from typing import Dict
+
+def build_source_relation_sql(source: Dict[str, str]) -> str:
+    """
+    Constructs the DuckDB relation SQL (e.g., 'read_parquet(...)') for a given source config.
+
+    WARNING: This logic constructs SQL strings directly from configuration parameters. 
+    Ensure source configuration is trusted to prevent SQL injection.
+    """
     st = source["type"]
 
     if st == "postgres":
@@ -30,7 +38,10 @@ def build_source_relation_sql(source: dict) -> str:
     raise ValueError(f"Unsupported source type: {st}")
 
 
-def build_target_write_sql(target: dict, relation_sql: str) -> str:
+def build_target_write_sql(target: Dict[str, str], relation_sql: str) -> str:
+    """
+    Constructs the DuckDB write SQL (e.g., 'COPY ... TO ...') for a given target config.
+    """
     tt = target["type"]
 
     if tt == "parquet":

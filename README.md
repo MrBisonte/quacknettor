@@ -54,7 +54,7 @@ flowchart LR
     *   **Write / Copy**: Writes the data to the destination using standard SQL (`COPY`, `CREATE TABLE`).
 *   **Targets**: Output can be directed back to databases or dumped as Parquet files (locally or to S3).
 
-## Setup
+### Setup
 
 1.  **Clone the repository**:
     ```bash
@@ -63,13 +63,47 @@ flowchart LR
     ```
 
 2.  **Install dependencies**:
+    Using `pip` (modern pip uses pyproject.toml):
+    ```bash
+    pip install .
+    ```
+    Or strictly from requirements:
     ```bash
     pip install -r requirements.txt
     ```
     *Note: Ensure you have a working Python environment (3.9+).*
 
 3.  **Configure Environment**:
-    Set up necessary environment variables for database connections (e.g., `PG_PASSWORD`, `SF_PASSWORD`) as referenced in `pipelines.yml`.
+    DuckEL uses environment variables for secure and flexible configuration. You must export the following variables before running the app or tests:
+
+    ```bash
+    export PG_HOST=localhost
+    export PG_DATABASE=dbmain
+    export PG_USER=dbadmin
+    export PG_PASSWORD=adminpwd123
+    # Add SF_PASSWORD etc. if using Snowflake
+    ```
+
+## Local Development (Postgres)
+
+If you do not have a Postgres server, you can set one up locally (on macOS/Linux):
+
+1.  **Install & Initialize**:
+    ```bash
+    brew install postgresql@14
+    /opt/homebrew/opt/postgresql@14/bin/initdb -D pgdata -U dbadmin --auth=trust
+    ```
+
+2.  **Start Server**:
+    ```bash
+    /opt/homebrew/opt/postgresql@14/bin/pg_ctl -D pgdata -l pg.log start
+    ```
+
+3.  **Create Database**:
+    ```bash
+    /opt/homebrew/opt/postgresql@14/bin/createdb -h localhost -p 5432 -U dbadmin dbmain
+    # (Optional) Set password explicitly if needed, though initdb auth=trust allows local access.
+    ```
 
 ## Usage
 
@@ -80,11 +114,13 @@ DuckEL includes a Streamlit application to run and visualize pipelines.
     streamlit run app.py
     ```
 
-2.  **Select a Pipeline**:
-    Choose a configured pipeline effectively defined in `pipelines.yml` from the dropdown menu.
+2.  **Configure Execution**:
+    -   **Source**: Select a data source (defined in `pipelines.yml`) from the "Source" dropdown.
+    -   **Target**: Select a destination target from the "Target" dropdown.
+    -   **Options**: Toggle "Compute Counts", "Sample Data", etc.
 
 3.  **Run & Analyze**:
-    Click "Run" to execute the EL process. The app will display:
+    Click "Run Pipeline" to execute the EL process. The app will display:
     -   Execution timings (Count, Sample, Write).
     -   A preview sample of the data.
     -   The generated SQL used for writing.
