@@ -116,9 +116,24 @@ If you do not have a Postgres server, you can set one up locally (on macOS/Linux
     # (Optional) Set password explicitly if needed, though initdb auth=trust allows local access.
     ```
 
+    export SF_SCHEMA=public
+    ```
+
+4.  **Verify Connections (Critical)**:
+    Before running the main application, verify your connectivity and credentials using the provided test scripts.
+
+    *   **Postgres**:
+        ```bash
+        python quacknettor/test_pg_connection.py
+        ```
+    *   **Snowflake**:
+        ```bash
+        python quacknettor/test_snowflake_connection.py
+        ```
+
 ## Usage
 
-DuckEL includes a Streamlit application to run and visualize pipelines.
+Once connections are verified, you can run the main Streamlit application.
 
 1.  **Run the App**:
     ```bash
