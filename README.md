@@ -83,11 +83,16 @@ flowchart LR
     DuckEL uses environment variables for secure and flexible configuration. You must export the following variables before running the app or tests:
 
     ```bash
-    export PG_HOST=localhost
-    export PG_DATABASE=dbmain
     export PG_USER=dbadmin
     export PG_PASSWORD=adminpwd123
-    # Add SF_PASSWORD etc. if using Snowflake
+    
+    # If using Snowflake:
+    export SF_ACCOUNT=xy12345.us-east-1
+    export SF_USER=myuser
+    export SF_PASSWORD=mypassword
+    export SF_WAREHOUSE=compute_wh
+    export SF_DATABASE=mydb
+    export SF_SCHEMA=public
     ```
 
 ## Local Development (Postgres)

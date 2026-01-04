@@ -1,12 +1,12 @@
 [project]
 name = "quacknettor"
-version = "1.0.0"
+version = "1.0.1"
 description = "DuckEL: DuckDB-powered Extract + Load POC"
 authors = [
     {name = "User", email = "user@example.com"},
 ]
 dependencies = [
-    "duckdb==1.1.3",
+    "duckdb==1.1.0",
     "pyyaml>=6.0",
     "streamlit>=1.30.0",
     "pandas>=2.0.0",
