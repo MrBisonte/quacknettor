@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import duckdb
 
@@ -8,20 +9,23 @@ def resolve_env_tokens(s: str) -> str:
     """
     Resolve environment variable tokens in a string.
     Replaces '__ENV:VAR_NAME' with the value of the environment variable VAR_NAME.
+    Supports multiple tokens and tokens embedded in strings.
     """
-    # Replace "__ENV:VAR" with os.environ["VAR"]
     if not isinstance(s, str):
         return s
-    token = "__ENV:"
-    if token in s:
-        try:
-            var = s.split(token, 1)[1]
-            val = os.environ.get(var, "")
-            return s.replace(f"{token}{var}", val)
-        except IndexError:
-            logger.warning(f"Malformed environment token in string: {s}")
-            return s
-    return s
+    
+    # Pattern: __ENV: followed by alphanumeric/underscore characters
+    pattern = r"__ENV:([A-Za-z0-9_]+)"
+    
+    def replace_match(match):
+        var_name = match.group(1)
+        val = os.environ.get(var_name)
+        if val is None:
+            logger.warning(f"Environment variable '{var_name}' not set, resolving to empty string.")
+            return ""
+        return val
+
+    return re.sub(pattern, replace_match, s)
 
 def make_con(db_path: str = ":memory:", threads: int = 4, memory_limit: str = "2GB") -> duckdb.DuckDBPyConnection:
     """

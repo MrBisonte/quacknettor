@@ -1,6 +1,12 @@
 # DuckEL: DuckDB-powered Extract + Load POC
 
+![CI](https://github.com/MrBisonte/quacknettor/actions/workflows/ci.yml/badge.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+
 DuckEL is a lightweight, high-performance Extract and Load (EL) tool powered by **DuckDB**. It demonstrates how to use DuckDB's engine to efficiently ingest data from various sources (Postgres, Snowflake, Parquet), perform lightweight processing (counting, sampling), and write the results to a target destination.
+
+![DuckEL UI](assets/app_screenshot.png)
 
 ## Architecture
 

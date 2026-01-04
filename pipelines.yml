@@ -1,3 +1,4 @@
+sources:
   pg_local:
     type: postgres
     name: pgsrc
