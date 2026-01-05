@@ -12,44 +12,57 @@ DuckEL is a lightweight, high-performance Extract and Load (EL) tool powered by 
 
 The following diagram illustrates the high-level data flow in DuckEL.
 
-```mermaid
-flowchart LR
-    subgraph Sources
-        PG[(🐘 Postgres)]
-        SF[(❄️ Snowflake)]
-        S3_Src[☁️ AWS S3]
-        Local_Src[📂 Local Filesystem]
-        PQ_In{{Parquet Files}}
-    end
+flowchart TD
+    %% Use classes to style nodes
+    classDef db fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef file fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef core fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    classDef ui fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,rx:10,ry:10;
+    classDef ai fill:#fff,stroke:#ea4335,stroke-width:2px,stroke-dasharray: 5 5;
 
-    subgraph Core[DuckDB Engine]
+    User((🧑‍💻 User))
+
+    subgraph App_Layer [Streamlit Application]
         direction TB
-        Attach[[Attach / Read Source]]
-        Process[[Count & Sample]]
-        Write[[Write / Copy to Target]]
+        UI[🖥️ Streamlit Frontend]:::ui
+        Jules[🤖 Jules AI Assistant]:::ai
+        Runner[⚙️ Pipeline Runner]:::core
     end
 
-    subgraph Targets
-        PG_Out[(🐘 Postgres)]
-        SF_Out[(❄️ Snowflake)]
-        PQ_Out{{Parquet Files}}
-        S3_Tgt[☁️ AWS S3]
-        Local_Tgt[📂 Local Filesystem]
+    subgraph Data_Sources [Source Layer]
+        PG_Src[(🐘 Postgres)]:::db
+        SF_Src[(❄️ Snowflake)]:::db
+        PQ_Src{{📜 Parquet Files}}:::file
     end
 
-    %% Edge Definitions (Order is important for linkStyle)
-    S3_Src & Local_Src --> PQ_In
-    PG & SF & PQ_In -.-> Attach
-    Attach --> Process
-    Process --> Write
-    Write -.-> PG_Out & SF_Out & PQ_Out
-    PQ_Out --> S3_Tgt & Local_Tgt
-    
-    %% Animate dashed lines: 
-    %% Sources->Attach (Indices 2,3,4) 
-    %% Write->Targets (Indices 7,8,9)
-    linkStyle 2,3,4,7,8,9 stroke-width:2px,fill:none,stroke:gray,stroke-dasharray: 5 5,animation:dash 1s linear infinite
-```
+    subgraph DuckDB_Engine [DuckDB Embedded Engine]
+        Attach([🔗 Attach / Read])
+        Compute([⚡ Count & Sample])
+        Write([💾 Write / Copy])
+    end
+
+    subgraph Targets [Destination Layer]
+        PG_Out[(🐘 Postgres)]:::db
+        SF_Out[(❄️ Snowflake)]:::db
+        PQ_Out{{📜 Parquet Files}}:::file
+    end
+
+    %% Interactions
+    User -->|Config & Run| UI
+    User -.->|Ask for Help| Jules
+    Jules -.->|Suggest Pipeline| UI
+    UI -->|Execute| Runner
+    Runner -->|Orchestrate| DuckDB_Engine
+
+    %% Data Flow
+    PG_Src & SF_Src & PQ_Src ==> Attach
+    Attach ==> Compute
+    Compute ==> Write
+    Write ==> PG_Out & SF_Out & PQ_Out
+
+    %% Styling Logic
+    linkStyle 5,6,7,8,9,10,11 stroke-width:3px,fill:none,stroke:#2e7d32;
+    linkStyle 1,2 stroke-width:1px,stroke:#ea4335,stroke-dasharray: 3 3;
 
 ### Key Components
 
