@@ -57,7 +57,7 @@ flowchart TD
     %% Data Flow
     PG_Src & SF_Src & PQ_Src ==> Attach
     Attach ==> Compute
-    Compute ==> Write
+    Attach ==> Write
     Write ==> PG_Out & SF_Out & PQ_Out
 
     %% Styling Logic
