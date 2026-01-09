@@ -1,0 +1,55 @@
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311']
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | venv
+  | __pycache__
+  | \.pytest_cache
+  | htmlcov
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]  # Line too long (handled by black)
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    "htmlcov",
+]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Set to true for stricter checking
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov=duckel --cov-report=html --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["duckel"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

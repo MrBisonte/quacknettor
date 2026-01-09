@@ -1,0 +1,74 @@
+pipelines:
+  pg_to_parquet_local:
+    source:
+      type: postgres
+      name: pgsrc
+      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD"
+      object: "public.my_table"   # or query: "SELECT ..."
+
+    target:
+      type: parquet
+      path: "./out/my_table.parquet"
+      mode: overwrite             # overwrite|append (append needs dataset-style layout)
+      compression: zstd
+
+    options:
+      threads: 8
+      memory_limit: "4GB"
+      sample_rows: 200
+
+  parquet_to_pg:
+    source:
+      type: parquet
+      path: "./out/my_table.parquet"
+
+    target:
+      type: postgres
+      name: pgtgt
+      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD"
+      table: "public.my_table_copy"
+      mode: overwrite             # overwrite|append
+
+  snowflake_to_parquet:
+     source:
+       type: snowflake
+       # Example using password auth. For keypair/browser, the conn string differs.
+       # DuckDB snowflake extension uses standard connection string parameters.
+       conn: "user=myuser password=__ENV:SF_PASSWORD account=myaccount warehouse=mywh database=mydb schema=public"
+       object: "mydb.public.mytable" 
+     
+     target:
+       type: parquet
+       path: "./out/sf_dump.parquet"
+       mode: overwrite
+ 
+  local_parquet_to_parquet:
+    source:
+      type: parquet
+      path: "./data/inbound/telco_churn_sample.parquet"
+    
+    target:
+      type: parquet
+      path: "./data/outbound/telco_churn_copy.parquet"
+      mode: overwrite
+
+  s3_to_local_parquet:
+    source:
+      type: parquet
+      path: "s3://my-bucket/in/telco_churn_sample.parquet"
+
+    target:
+      type: parquet
+      path: "./data/outbound/s3_telco_churn_copy.parquet"
+      mode: overwrite
+
+  local_to_s3_parquet:
+    source:
+      type: parquet
+      path: "./data/inbound/telco_churn_sample.parquet"
+
+    target:
+      type: parquet
+      path: "s3://my-bucket/out/telco_churn_copy.parquet"
+      mode: overwrite
+
