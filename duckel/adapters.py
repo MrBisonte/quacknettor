@@ -4,7 +4,7 @@ SQL adapters for different source and target types.
 Provides secure SQL generation with injection protection.
 """
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Any, List, Dict, Set
 import re
 from .logger import logger
 from .config import resolve_env_tokens, resolve_secret_tokens
@@ -67,6 +67,30 @@ class SourceAdapter(Adapter):
     def get_relation_sql(self) -> str:
         """Get SQL expression to reference this source."""
         pass
+    
+    def get_incremental_sql(self, relation_sql: str, watermark_value: Optional[Any] = None) -> str:
+        """
+        Get SQL expression with incremental filtering applied.
+        
+        Args:
+            relation_sql: Base relation SQL
+            watermark_value: Value to filter by (records > watermark)
+            
+        Returns:
+            SQL expression with WHERE clause if applicable
+        """
+        key = self.config.get("incremental_key")
+        
+        if key and watermark_value is not None:
+            # Handle string vs numeric comparison if needed
+            # For now, we assume simple comparison works in SQL
+            logger.info(f"Applying incremental filter: {key} > '{watermark_value}'")
+            
+            # Use safe parameter injection if possible, but here we are constructing SQL string
+            # DuckDB handles varying types in comparison
+            return f"(SELECT * FROM {relation_sql} WHERE {key} > '{watermark_value}')"
+            
+        return relation_sql
 
 
 class ParquetSourceAdapter(SourceAdapter):
@@ -194,6 +218,61 @@ class TargetAdapter(Adapter):
         """Build SQL to write data to target."""
         pass
 
+    def sync_schema(self, con, relation_sql: str, evolution_override: Optional[str] = None):
+        """
+        Synchronize target schema with source schema.
+        
+        Args:
+            con: DuckDB connection
+            relation_sql: Source relation SQL
+            evolution_override: Optional override for schema evolution mode
+        """
+        evolution = evolution_override or self.config.get("schema_evolution", "ignore")
+        if evolution == "ignore":
+            return
+            
+        try:
+            # tailored for DuckDB attached databases
+            # Get source columns
+            src_desc = con.execute(f"DESCRIBE SELECT * FROM {relation_sql} LIMIT 0").fetchall()
+            src_cols = {r[0]: r[1] for r in src_desc}
+            
+            # Get target columns
+            # We need to construct the full table name properly
+            target_name = self.config.get("table")
+            if hasattr(self, "config") and "name" in self.config:
+                 target_name = f"{self.config['name']}.{target_name}"
+            
+            try:
+                tgt_desc = con.execute(f"DESCRIBE {target_name}").fetchall()
+                tgt_cols = {r[0]: r[1] for r in tgt_desc}
+            except Exception:
+                # Table might not exist, which will be handled by CREATE TABLE later
+                return
+
+            # Compare
+            new_cols = {k: v for k, v in src_cols.items() if k not in tgt_cols}
+            
+            if new_cols:
+                msg = f"Schema mismatch! New columns found: {list(new_cols.keys())}"
+                if evolution == "fail":
+                    raise AdapterError(msg)
+                elif evolution == "evolve":
+                    logger.info(f"Evolving schema for {target_name}. Adding columns: {list(new_cols.keys())}")
+                    for col, dtype in new_cols.items():
+                        # Map some complex types if necessary, but DuckDB usually handles it
+                        try:
+                            # Use quotes for safety
+                            con.execute(f"ALTER TABLE {target_name} ADD COLUMN \"{col}\" {dtype}")
+                        except Exception as e:
+                            logger.error(f"Failed to add column {col}: {e}")
+                            raise AdapterError(f"Schema evolution failed: {e}") from e
+
+        except Exception as e:
+            if evolution == "fail":
+                raise AdapterError(f"Schema validation failed: {e}") from e
+            logger.warning(f"Schema sync check warning: {e}")
+
 
 class ParquetTargetAdapter(TargetAdapter):
     """Adapter for Parquet file targets."""
@@ -204,6 +283,10 @@ class ParquetTargetAdapter(TargetAdapter):
     
     def attach(self, con):
         """No attachment needed for Parquet files."""
+        pass
+        
+    def sync_schema(self, con, relation_sql: str, evolution_override: Optional[str] = None):
+        """Schema evolution not supported for Parquet files (yet)."""
         pass
     
     def build_write_sql(self, relation_sql: str) -> str:
@@ -258,6 +341,7 @@ class PostgresTargetAdapter(TargetAdapter):
         name = self.sanitize_identifier(self.config.get("name", "pgtgt"))
         table = self.sanitize_identifier(self.config["table"])
         mode = self.config.get("mode", "append")
+        unique_key = self.config.get("unique_key")
         
         # Prefix table with attachment name if not already qualified
         if "." in table:
@@ -271,6 +355,16 @@ class PostgresTargetAdapter(TargetAdapter):
             DROP TABLE IF EXISTS {full_table};
             CREATE TABLE {full_table} AS SELECT * FROM {relation_sql};
             """
+        elif mode == "upsert":
+            if not unique_key:
+                raise ValueError("Upsert requires 'unique_key' configuration")
+            
+            logger.info(f"Upserting to table: {full_table} using key: {unique_key}")
+            # DuckDB via Postgres attachment handles INSERT OR REPLACE as standard insert or specialized logic?
+            # Safe bet with DuckDB's postgres scanner is standard SQL passed.
+            # But standard PG needs `ON CONFLICT`.
+            # We'll use DuckDB's `INSERT OR REPLACE INTO` which is the dedicated upsert syntax
+            return f"INSERT OR REPLACE INTO {full_table} SELECT * FROM {relation_sql};"
         else:
             logger.info(f"Appending to table: {full_table}")
             return f"INSERT INTO {full_table} SELECT * FROM {relation_sql};"

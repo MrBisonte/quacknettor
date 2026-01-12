@@ -72,3 +72,14 @@ pipelines:
       path: "s3://my-bucket/out/telco_churn_copy.parquet"
       mode: overwrite
 
+  incremental_parquet_test:
+    source:
+      type: parquet
+      path: "./tests/data/source.parquet"
+      incremental_key: "updated_at"
+    
+    target:
+      type: parquet
+      path: "./tests/data/target.parquet"
+      mode: append
+      schema_evolution: evolve

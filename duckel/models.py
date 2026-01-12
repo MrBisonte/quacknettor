@@ -41,6 +41,10 @@ class SourceConfig(BaseModel):
         if v and not re.match(r'^[a-zA-Z0-9_\.]+$', v):
             raise ValueError(f"Invalid SQL identifier: {v}. Only alphanumeric, underscore, and dot allowed.")
         return v
+    
+    # Incremental loading options
+    incremental_key: Optional[str] = None
+    lookback_window: Optional[str] = None
 
 
 class TargetConfig(BaseModel):
@@ -51,8 +55,12 @@ class TargetConfig(BaseModel):
     conn: Optional[str] = None
     name: Optional[str] = None
     table: Optional[str] = None
-    mode: Literal["overwrite", "append"] = "append"
+    mode: Literal["overwrite", "append", "upsert"] = "append"
     compression: Optional[str] = "zstd"
+    
+    # Evolution and upsert options
+    unique_key: Optional[str] = None
+    schema_evolution: Literal["ignore", "fail", "evolve"] = "ignore"
     
     @field_validator('path')
     @classmethod
@@ -78,12 +86,12 @@ class TargetConfig(BaseModel):
             raise ValueError(f"table required for {info.data.get('type')} target")
         return v
     
-    @field_validator('table', 'name')
+    @field_validator('table', 'name', 'unique_key')
     @classmethod
     def sanitize_identifier(cls, v: Optional[str]) -> Optional[str]:
         """Sanitize SQL identifiers to prevent injection."""
-        if v and not re.match(r'^[a-zA-Z0-9_\.]+$', v):
-            raise ValueError(f"Invalid SQL identifier: {v}. Only alphanumeric, underscore, and dot allowed.")
+        if v and not re.match(r'^[a-zA-Z0-9_\.,]+$', v): # Added comma support for composite keys
+            raise ValueError(f"Invalid SQL identifier: {v}. Only alphanumeric, underscore, dot, and comma allowed.")
         return v
 
 
@@ -96,6 +104,11 @@ class PipelineOptions(BaseModel):
     sample_data: bool = True
     sample_rows: int = Field(default=50, ge=1, le=100000)
     compute_summary: bool = False
+    
+    # New options for incremental and evolution
+    full_refresh: bool = False
+    schema_evolution: Literal["ignore", "fail", "evolve"] = "ignore"
+    ignore_watermark: bool = False
 
 
 class PipelineConfig(BaseModel):
