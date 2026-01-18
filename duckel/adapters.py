@@ -222,56 +222,80 @@ class TargetAdapter(Adapter):
         """
         Synchronize target schema with source schema.
         
+        This method now performs proactive validation:
+        1. Checks if target table exists (required for append/upsert)
+        2. Compares schemas and provides actionable error messages
+        
         Args:
             con: DuckDB connection
             relation_sql: Source relation SQL
             evolution_override: Optional override for schema evolution mode
         """
         evolution = evolution_override or self.config.get("schema_evolution", "ignore")
-        if evolution == "ignore":
-            return
-            
+        mode = self.config.get("mode", "append")
+        
+        # Construct full table name
+        target_name = self.config.get("table")
+        adapter_type = self.config.get("type", "database")
+        if hasattr(self, "config") and "name" in self.config:
+            target_name = f"{self.config['name']}.{target_name}"
+        
+        # Step 1: Check if target table exists
+        table_exists = False
+        tgt_cols = {}
         try:
-            # tailored for DuckDB attached databases
-            # Get source columns
+            tgt_desc = con.execute(f"DESCRIBE {target_name}").fetchall()
+            tgt_cols = {r[0]: r[1] for r in tgt_desc}
+            table_exists = True
+        except Exception as e:
+            # Table does not exist
+            table_exists = False
+            error_msg = str(e).lower()
+            
+            # If mode requires existing table, fail immediately with actionable message
+            if mode in ("append", "upsert"):
+                raise AdapterError(
+                    f"Target table '{target_name}' not found in {adapter_type}. "
+                    f"Suggestion: Use 'mode: overwrite' for your first run to bootstrap the table structure, "
+                    f"or create the table manually in the target database."
+                )
+            # For overwrite mode, table will be created - no error needed
+            return
+        
+        # Step 2: Compare schemas (always do this if table exists)
+        try:
             src_desc = con.execute(f"DESCRIBE SELECT * FROM {relation_sql} LIMIT 0").fetchall()
             src_cols = {r[0]: r[1] for r in src_desc}
-            
-            # Get target columns
-            # We need to construct the full table name properly
-            target_name = self.config.get("table")
-            if hasattr(self, "config") and "name" in self.config:
-                 target_name = f"{self.config['name']}.{target_name}"
-            
-            try:
-                tgt_desc = con.execute(f"DESCRIBE {target_name}").fetchall()
-                tgt_cols = {r[0]: r[1] for r in tgt_desc}
-            except Exception:
-                # Table might not exist, which will be handled by CREATE TABLE later
-                return
-
-            # Compare
-            new_cols = {k: v for k, v in src_cols.items() if k not in tgt_cols}
-            
-            if new_cols:
-                msg = f"Schema mismatch! New columns found: {list(new_cols.keys())}"
-                if evolution == "fail":
-                    raise AdapterError(msg)
-                elif evolution == "evolve":
-                    logger.info(f"Evolving schema for {target_name}. Adding columns: {list(new_cols.keys())}")
-                    for col, dtype in new_cols.items():
-                        # Map some complex types if necessary, but DuckDB usually handles it
-                        try:
-                            # Use quotes for safety
-                            con.execute(f"ALTER TABLE {target_name} ADD COLUMN \"{col}\" {dtype}")
-                        except Exception as e:
-                            logger.error(f"Failed to add column {col}: {e}")
-                            raise AdapterError(f"Schema evolution failed: {e}") from e
-
         except Exception as e:
+            logger.warning(f"Could not describe source for schema comparison: {e}")
+            return
+        
+        # Find columns in source that are missing in target
+        missing_cols = {k: v for k, v in src_cols.items() if k not in tgt_cols}
+        
+        if missing_cols:
+            missing_list = list(missing_cols.keys())
+            
             if evolution == "fail":
-                raise AdapterError(f"Schema validation failed: {e}") from e
-            logger.warning(f"Schema sync check warning: {e}")
+                raise AdapterError(
+                    f"Schema mismatch: Source has columns {missing_list} that are missing in target '{target_name}'. "
+                    f"Pipeline aborted because schema_evolution is set to 'fail'."
+                )
+            elif evolution == "evolve":
+                logger.info(f"Evolving schema for {target_name}. Adding columns: {missing_list}")
+                for col, dtype in missing_cols.items():
+                    try:
+                        con.execute(f'ALTER TABLE {target_name} ADD COLUMN "{col}" {dtype}')
+                    except Exception as e:
+                        logger.error(f"Failed to add column {col}: {e}")
+                        raise AdapterError(f"Schema evolution failed while adding column '{col}': {e}") from e
+            else:
+                # evolution == "ignore" - but we still warn with actionable message
+                raise AdapterError(
+                    f"Schema mismatch: Source has columns {missing_list} that are missing in target '{target_name}'. "
+                    f"Suggestion: Set 'schema_evolution: evolve' to add these columns automatically, "
+                    f"or use 'mode: overwrite' to recreate the table with the new schema."
+                )
 
 
 class ParquetTargetAdapter(TargetAdapter):
@@ -325,7 +349,7 @@ class PostgresTargetAdapter(TargetAdapter):
             raise ValueError("Postgres target requires 'table'")
     
     def attach(self, con):
-        """Attach Postgres database to DuckDB."""
+        """Attach Postgres database to DuckDB with categorized error handling."""
         name = self.sanitize_identifier(self.config.get("name", "pgtgt"))
         conn_str = resolve_env_tokens(self.config["conn"])
         conn_str = resolve_secret_tokens(conn_str)
@@ -334,8 +358,22 @@ class PostgresTargetAdapter(TargetAdapter):
         try:
             con.execute(f"ATTACH '{conn_str}' AS {name} (TYPE postgres);")
         except Exception as e:
+            error_msg = str(e).lower()
             logger.error(f"Failed to attach Postgres: {e}")
-            raise AdapterError(f"Failed to attach Postgres database: {e}") from e
+            
+            # Categorize the error for actionable feedback
+            if any(kw in error_msg for kw in ["authentication failed", "password", "role", "permission denied"]):
+                raise AdapterError(
+                    f"Postgres authentication failed for attachment '{name}'. "
+                    f"Check your username/password in the connection string. Original error: {e}"
+                ) from e
+            elif any(kw in error_msg for kw in ["could not connect", "timeout", "host", "connection refused", "no route"]):
+                raise AdapterError(
+                    f"Cannot reach Postgres server for attachment '{name}'. "
+                    f"Verify the host, port, and network connectivity. Original error: {e}"
+                ) from e
+            else:
+                raise AdapterError(f"Failed to attach Postgres database '{name}': {e}") from e
     
     def build_write_sql(self, relation_sql: str) -> str:
         name = self.sanitize_identifier(self.config.get("name", "pgtgt"))
@@ -380,7 +418,7 @@ class SnowflakeTargetAdapter(TargetAdapter):
             raise ValueError("Snowflake target requires 'table'")
     
     def attach(self, con):
-        """Attach Snowflake database to DuckDB."""
+        """Attach Snowflake database to DuckDB with categorized error handling."""
         name = self.sanitize_identifier(self.config.get("name", "sftgt"))
         conn_str = resolve_env_tokens(self.config["conn"])
         conn_str = resolve_secret_tokens(conn_str)
@@ -389,8 +427,27 @@ class SnowflakeTargetAdapter(TargetAdapter):
         try:
             con.execute(f"ATTACH '{conn_str}' AS {name} (TYPE snowflake);")
         except Exception as e:
+            error_msg = str(e).lower()
             logger.error(f"Failed to attach Snowflake: {e}")
-            raise AdapterError(f"Failed to attach Snowflake database: {e}") from e
+            
+            # Categorize the error for actionable feedback
+            if any(kw in error_msg for kw in ["authentication", "password", "incorrect", "user", "login"]):
+                raise AdapterError(
+                    f"Snowflake authentication failed for attachment '{name}'. "
+                    f"Check your account, user, and password settings. Original error: {e}"
+                ) from e
+            elif any(kw in error_msg for kw in ["could not connect", "timeout", "account", "host", "network"]):
+                raise AdapterError(
+                    f"Cannot reach Snowflake account for attachment '{name}'. "
+                    f"Verify the account identifier and network connectivity. Original error: {e}"
+                ) from e
+            elif "extension" in error_msg or "not found" in error_msg:
+                raise AdapterError(
+                    f"Snowflake extension not available. Install it with: INSTALL snowflake FROM community; "
+                    f"Original error: {e}"
+                ) from e
+            else:
+                raise AdapterError(f"Failed to attach Snowflake database '{name}': {e}") from e
     
     def build_write_sql(self, relation_sql: str) -> str:
         name = self.sanitize_identifier(self.config.get("name", "sftgt"))
