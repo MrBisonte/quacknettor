@@ -73,19 +73,135 @@ with col_title:
 with st.sidebar:
     st.header("⚙️ Configuration")
     
-    try:
-        pipelines = load_config("pipelines.yml")
-    except Exception as e:
-        st.error(f"❌ Failed to load configuration: {e}")
-        st.stop()
-    
-    pipeline_name = st.selectbox(
-        "Select Pipeline",
-        options=list(pipelines.keys()),
-        help="Choose a configured pipeline to execute"
+    # Mode selector
+    config_mode = st.radio(
+        "Configuration Mode",
+        ["📋 Preset Pipeline", "🔧 Custom Source/Target"],
+        horizontal=True
     )
     
-    pipeline_config = pipelines[pipeline_name]
+    st.divider()
+    
+    if config_mode == "📋 Preset Pipeline":
+        # Traditional pipeline selection
+        try:
+            pipelines = load_config("pipelines.yml")
+        except Exception as e:
+            st.error(f"❌ Failed to load configuration: {e}")
+            st.stop()
+        
+        pipeline_name = st.selectbox(
+            "Select Pipeline",
+            options=list(pipelines.keys()),
+            help="Choose a configured pipeline to execute"
+        )
+        pipeline_config = pipelines[pipeline_name]
+    
+    else:
+        # Custom source/target configuration
+        st.subheader("📥 Source Configuration")
+        
+        source_type = st.selectbox(
+            "Source Type",
+            ["parquet", "postgres", "snowflake"],
+            key="src_type"
+        )
+        
+        source_config = {"type": source_type}
+        
+        if source_type == "parquet":
+            source_path = st.text_input(
+                "Source Path",
+                value="./data/inbound/",
+                help="Local path or s3://bucket/path",
+                key="src_path"
+            )
+            source_config["path"] = source_path
+        
+        elif source_type == "postgres":
+            source_config["name"] = st.text_input("Attachment Name", value="pgsrc", key="src_name")
+            source_config["conn"] = st.text_input(
+                "Connection String",
+                value="dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD",
+                type="password",
+                key="src_conn"
+            )
+            source_config["object"] = st.text_input("Table/View", value="public.my_table", key="src_obj")
+        
+        elif source_type == "snowflake":
+            source_config["name"] = st.text_input("Attachment Name", value="sfsrc", key="src_name")
+            source_config["conn"] = st.text_input(
+                "Connection String",
+                value="user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA",
+                type="password",
+                key="src_conn"
+            )
+            source_config["object"] = st.text_input("Table/View", value="PUBLIC.my_table", key="src_obj")
+        
+        # Incremental key (optional)
+        with st.expander("⏱️ Incremental Options"):
+            inc_key = st.text_input("Incremental Key Column", value="", placeholder="e.g., updated_at")
+            if inc_key:
+                source_config["incremental_key"] = inc_key
+        
+        st.divider()
+        st.subheader("📤 Target Configuration")
+        
+        target_type = st.selectbox(
+            "Target Type",
+            ["parquet", "postgres", "snowflake"],
+            key="tgt_type"
+        )
+        
+        target_config = {"type": target_type}
+        
+        if target_type == "parquet":
+            target_path = st.text_input(
+                "Target Path",
+                value="./data/outbound/output.parquet",
+                help="Local path or s3://bucket/path",
+                key="tgt_path"
+            )
+            target_config["path"] = target_path
+            target_config["compression"] = st.selectbox("Compression", ["zstd", "snappy", "gzip", "none"], key="tgt_comp")
+        
+        elif target_type == "postgres":
+            target_config["name"] = st.text_input("Attachment Name", value="pgtgt", key="tgt_name")
+            target_config["conn"] = st.text_input(
+                "Connection String",
+                value="dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD",
+                type="password",
+                key="tgt_conn"
+            )
+            target_config["table"] = st.text_input("Target Table", value="public.my_output_table", key="tgt_table")
+        
+        elif target_type == "snowflake":
+            target_config["name"] = st.text_input("Attachment Name", value="sftgt", key="tgt_name")
+            target_config["conn"] = st.text_input(
+                "Connection String",
+                value="user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA",
+                type="password",
+                key="tgt_conn"
+            )
+            target_config["table"] = st.text_input("Target Table", value="PUBLIC.my_output_table", key="tgt_table")
+        
+        # Common target options
+        target_config["mode"] = st.selectbox("Write Mode", ["overwrite", "append", "upsert"], key="tgt_mode")
+        
+        if target_config["mode"] == "upsert":
+            target_config["unique_key"] = st.text_input("Unique Key", placeholder="e.g., id", key="tgt_ukey")
+        
+        # Build pipeline config dynamically
+        from duckel.models import SourceConfig, TargetConfig, PipelineConfig
+        try:
+            pipeline_config = PipelineConfig(
+                source=SourceConfig(**source_config),
+                target=TargetConfig(**target_config)
+            )
+            pipeline_name = f"custom_{source_type}_to_{target_type}"
+        except Exception as e:
+            st.error(f"❌ Invalid configuration: {e}")
+            st.stop()
     
     st.divider()
     
