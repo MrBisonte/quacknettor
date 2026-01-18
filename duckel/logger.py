@@ -57,5 +57,5 @@ def setup_logger(
     return logger
 
 
-# Default logger instance
-logger = setup_logger()
+# Default logger instance - always write to file for observability
+logger = setup_logger(log_file="duckel.log")

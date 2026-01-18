@@ -1,0 +1,193 @@
+# Integration Test Pipelines
+# This file defines 16 pipelines covering all source/target combinations.
+# Sources: Local Parquet, S3 Parquet, Postgres, Snowflake
+# Targets: Local Parquet, S3 Parquet, Postgres, Snowflake
+
+pipelines:
+  # ==============================
+  # LOCAL PARQUET as Source
+  # ==============================
+  integration_local_to_local:
+    source:
+      type: parquet
+      path: "./tests/data/integration_test_data.parquet"
+    target:
+      type: parquet
+      path: "./tests/data/output/local_to_local.parquet"
+      mode: overwrite
+
+  integration_local_to_s3:
+    source:
+      type: parquet
+      path: "./tests/data/integration_test_data.parquet"
+    target:
+      type: parquet
+      path: "s3://testbucket/output/local_to_s3.parquet"
+      mode: overwrite
+
+  integration_local_to_postgres:
+    source:
+      type: parquet
+      path: "./tests/data/integration_test_data.parquet"
+    target:
+      type: postgres
+      name: pgtgt
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      table: "public.local_to_postgres"
+      mode: overwrite
+
+  integration_local_to_snowflake:
+    source:
+      type: parquet
+      path: "./tests/data/integration_test_data.parquet"
+    target:
+      type: snowflake
+      name: sftgt
+      conn: "user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA"
+      table: "PUBLIC.local_to_snowflake"
+      mode: overwrite
+
+  # ==============================
+  # S3 PARQUET as Source
+  # ==============================
+  integration_s3_to_local:
+    source:
+      type: parquet
+      path: "s3://testbucket/integration_test_data.parquet"
+    target:
+      type: parquet
+      path: "./tests/data/output/s3_to_local.parquet"
+      mode: overwrite
+
+  integration_s3_to_s3:
+    source:
+      type: parquet
+      path: "s3://testbucket/integration_test_data.parquet"
+    target:
+      type: parquet
+      path: "s3://testbucket/output/s3_to_s3.parquet"
+      mode: overwrite
+
+  integration_s3_to_postgres:
+    source:
+      type: parquet
+      path: "s3://testbucket/integration_test_data.parquet"
+    target:
+      type: postgres
+      name: pgtgt
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      table: "public.s3_to_postgres"
+      mode: overwrite
+
+  integration_s3_to_snowflake:
+    source:
+      type: parquet
+      path: "s3://testbucket/integration_test_data.parquet"
+    target:
+      type: snowflake
+      name: sftgt
+      conn: "user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA"
+      table: "PUBLIC.s3_to_snowflake"
+      mode: overwrite
+
+  # ==============================
+  # POSTGRES as Source
+  # ==============================
+  integration_postgres_to_local:
+    source:
+      type: postgres
+      name: pgsrc
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      object: "public.integration_source"
+    target:
+      type: parquet
+      path: "./tests/data/output/postgres_to_local.parquet"
+      mode: overwrite
+
+  integration_postgres_to_s3:
+    source:
+      type: postgres
+      name: pgsrc
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      object: "public.integration_source"
+    target:
+      type: parquet
+      path: "s3://testbucket/output/postgres_to_s3.parquet"
+      mode: overwrite
+
+  integration_postgres_to_postgres:
+    source:
+      type: postgres
+      name: pgsrc
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      object: "public.integration_source"
+    target:
+      type: postgres
+      name: pgtgt
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      table: "public.postgres_to_postgres"
+      mode: overwrite
+
+  integration_postgres_to_snowflake:
+    source:
+      type: postgres
+      name: pgsrc
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      object: "public.integration_source"
+    target:
+      type: snowflake
+      name: sftgt
+      conn: "user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA"
+      table: "PUBLIC.postgres_to_snowflake"
+      mode: overwrite
+
+  # ==============================
+  # SNOWFLAKE as Source
+  # ==============================
+  integration_snowflake_to_local:
+    source:
+      type: snowflake
+      name: sfsrc
+      conn: "user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA"
+      object: "PUBLIC.integration_source"
+    target:
+      type: parquet
+      path: "./tests/data/output/snowflake_to_local.parquet"
+      mode: overwrite
+
+  integration_snowflake_to_s3:
+    source:
+      type: snowflake
+      name: sfsrc
+      conn: "user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA"
+      object: "PUBLIC.integration_source"
+    target:
+      type: parquet
+      path: "s3://testbucket/output/snowflake_to_s3.parquet"
+      mode: overwrite
+
+  integration_snowflake_to_postgres:
+    source:
+      type: snowflake
+      name: sfsrc
+      conn: "user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA"
+      object: "PUBLIC.integration_source"
+    target:
+      type: postgres
+      name: pgtgt
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      table: "public.snowflake_to_postgres"
+      mode: overwrite
+
+  integration_snowflake_to_snowflake:
+    source:
+      type: snowflake
+      name: sfsrc
+      conn: "user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA"
+      object: "PUBLIC.integration_source"
+    target:
+      type: snowflake
+      name: sftgt
+      conn: "user=__ENV:SF_USER password=__ENV:SF_PASSWORD account=__ENV:SF_ACCOUNT warehouse=__ENV:SF_WAREHOUSE database=__ENV:SF_DATABASE schema=__ENV:SF_SCHEMA"
+      table: "PUBLIC.snowflake_to_snowflake"
+      mode: overwrite

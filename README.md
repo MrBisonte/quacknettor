@@ -98,8 +98,122 @@ flowchart TD
 
 *   `app.py`: Main Streamlit UI.
 *   `pipelines.yml`: Pipeline configuration definitions.
+*   `pipelines_integration.yml`: Full matrix of 16 integration test pipelines.
 *   `duckel/`: Core engine code (Adapters, Models, Runner).
-*   `tests/`: Verification suite.
+*   `tests/`: Unit verification suite.
+*   `tests/integration/`: Integration tests for all source/target combinations.
+*   `docker-compose.yml`: Development infrastructure (Postgres, MinIO/S3).
+
+---
+
+## Integration Testing
+
+This section covers running the full integration test suite across all supported source/target combinations.
+
+### Prerequisites
+
+*   **Docker & Docker Compose**: Required for Postgres and MinIO (S3-compatible) services.
+*   **Python 3.9+**: With project dependencies installed.
+*   **Snowflake Account** (optional): Required only for Snowflake-related pipelines.
+
+### 1. Environment Setup
+
+#### Step 1: Start Docker Services
+
+```bash
+docker-compose up -d
+```
+
+This starts:
+*   **Postgres** on `localhost:5432` (user: `testuser`, pass: `testpass`, db: `testdb`)
+*   **MinIO** on `localhost:9000` (access: `minioadmin`, secret: `minioadmin`, bucket: `testbucket`)
+
+#### Step 2: Configure Environment Variables
+
+Copy `.env.template` to `.env` and fill in values:
+
+```bash
+cp .env.template .env
+```
+
+**Required for Postgres/S3 (Docker)**:
+```env
+AWS_ACCESS_KEY_ID=minioadmin
+AWS_SECRET_ACCESS_KEY=minioadmin
+S3_ENDPOINT=http://localhost:9000
+PG_PASSWORD=testpass
+```
+
+**Required for Snowflake (optional)**:
+```env
+SF_USER=your_username
+SF_PASSWORD=your_password
+SF_ACCOUNT=your_account
+SF_WAREHOUSE=your_warehouse
+SF_DATABASE=your_database
+SF_SCHEMA=PUBLIC
+```
+
+#### Step 3: Generate & Seed Test Data
+
+```bash
+python tests/generate_test_data.py
+```
+
+This creates test data with diverse datatypes (integers, floats, strings, booleans, dates, timestamps) and seeds it to local files, Postgres, and S3.
+
+### 2. Running Pipelines
+
+#### CLI Execution
+
+Run a specific pipeline from `pipelines_integration.yml`:
+
+```bash
+python -c "
+from duckel.config import load_config
+from duckel.runner import PipelineRunner
+
+pipelines = load_config('pipelines_integration.yml')
+config = pipelines['integration_local_to_postgres']
+runner = PipelineRunner(config, pipeline_name='integration_local_to_postgres')
+result = runner.run()
+print(f'Rows processed: {result[\"rows\"]}')"
+```
+
+#### UI Execution
+
+Launch the Streamlit app and select a pipeline from the dropdown:
+
+```bash
+streamlit run app.py
+```
+
+> **Note**: To see integration pipelines in the UI, modify `app.py` line 77 to load `pipelines_integration.yml` instead of `pipelines.yml`.
+
+### 3. Running Integration Tests
+
+**Docker-only pipelines** (Postgres + S3):
+```bash
+pytest tests/integration -m "integration and not snowflake" -v
+```
+
+**All pipelines** (requires Snowflake credentials):
+```bash
+pytest tests/integration -m integration -v
+```
+
+### 4. Pipeline Matrix
+
+The integration suite covers **16 pipelines** for all combinations:
+
+| Source ↓ / Target → | Local Parquet | S3 Parquet | Postgres | Snowflake |
+|---------------------|---------------|------------|----------|-----------|
+| **Local Parquet**   | ✅            | ✅         | ✅       | ✅        |
+| **S3 Parquet**      | ✅            | ✅         | ✅       | ✅        |
+| **Postgres**        | ✅            | ✅         | ✅       | ✅        |
+| **Snowflake**       | ✅            | ✅         | ✅       | ✅        |
+
+---
 
 ## License
 MIT

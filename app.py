@@ -114,6 +114,22 @@ with st.sidebar:
     )
 
     st.divider()
+
+    # AI Assistant Key
+    st.subheader("🤖 AI Assistant")
+    env_key = os.environ.get("JULES_API_KEY")
+    if not env_key:
+        jules_api_key = st.text_input(
+            "Jules API Key",
+            type="password",
+            help="Enter your JULES_API_KEY to enable AI features"
+        )
+        if jules_api_key:
+            os.environ["JULES_API_KEY"] = jules_api_key
+    else:
+        st.success("✅ AI Key detected")
+
+    st.divider()
     
     # Runtime toggles
     st.subheader("Runtime Stages")
@@ -200,20 +216,97 @@ with tab_run:
                 st.code(traceback.format_exc())
 
 with tab_obs:
-    st.header("Logs & Observability")
-    st.markdown("Real-time pipeline execution logs.")
+    st.header("📊 Logs & Observability")
+    st.markdown("Real-time pipeline execution logs with status tracking.")
     
-    log_file = "duckel.log" # Default log file
+    log_file = "duckel.log"
+    
+    # Auto-refresh toggle
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        auto_refresh = st.checkbox("Auto-refresh", value=False)
+    with col2:
+        if st.button("🔄 Refresh Now"):
+            st.rerun()
+    with col3:
+        if st.button("🗑️ Clear Logs"):
+            if os.path.exists(log_file):
+                open(log_file, "w").close()
+            st.rerun()
+    
+    if auto_refresh:
+        import time as _time
+        _time.sleep(2)
+        st.rerun()
+    
+    st.divider()
+    
     if os.path.exists(log_file):
         with open(log_file, "r") as f:
             lines = f.readlines()
-            # Show last 100 lines
-            st.code("".join(lines[-100:]))
-            if st.button("Clear Logs"):
-                open(log_file, "w").close()
-                st.rerun()
+        
+        if lines:
+            # Summary metrics
+            total_lines = len(lines)
+            error_count = sum(1 for l in lines if "ERROR" in l)
+            warning_count = sum(1 for l in lines if "WARNING" in l)
+            info_count = sum(1 for l in lines if "INFO" in l)
+            
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Total Entries", total_lines)
+            m2.metric("Errors", error_count, delta=None if error_count == 0 else f"{error_count}", delta_color="inverse")
+            m3.metric("Warnings", warning_count)
+            m4.metric("Info", info_count)
+            
+            st.divider()
+            
+            # Filter options
+            filter_col1, filter_col2 = st.columns([1, 3])
+            with filter_col1:
+                level_filter = st.selectbox("Filter by Level", ["ALL", "ERROR", "WARNING", "INFO", "DEBUG"])
+            with filter_col2:
+                search_term = st.text_input("Search logs", placeholder="Enter search term...")
+            
+            # Filter logs
+            filtered_lines = lines
+            if level_filter != "ALL":
+                filtered_lines = [l for l in filtered_lines if level_filter in l]
+            if search_term:
+                filtered_lines = [l for l in filtered_lines if search_term.lower() in l.lower()]
+            
+            # Display logs with syntax highlighting
+            st.subheader(f"Log Entries ({len(filtered_lines)} shown)")
+            
+            # Show last 100 filtered lines, newest first
+            display_lines = filtered_lines[-100:][::-1]
+            
+            for line in display_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Color code by level
+                if "ERROR" in line:
+                    st.markdown(f'<div class="error-box" style="padding:0.5rem;margin:0.2rem 0;font-family:monospace;font-size:0.85rem;">❌ {line}</div>', unsafe_allow_html=True)
+                elif "WARNING" in line:
+                    st.markdown(f'<div style="padding:0.5rem;margin:0.2rem 0;background:#fff3cd;border-left:3px solid #ffc107;font-family:monospace;font-size:0.85rem;">⚠️ {line}</div>', unsafe_allow_html=True)
+                elif "INFO" in line:
+                    st.markdown(f'<div class="info-box" style="padding:0.5rem;margin:0.2rem 0;font-family:monospace;font-size:0.85rem;">ℹ️ {line}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div style="padding:0.5rem;margin:0.2rem 0;background:#f8f9fa;border-left:3px solid #6c757d;font-family:monospace;font-size:0.85rem;">🔍 {line}</div>', unsafe_allow_html=True)
+        else:
+            st.info("Log file exists but is empty. Run a pipeline to generate logs.")
     else:
-        st.info("No log file found.")
+        st.warning("⚠️ No log file found. Run a pipeline to generate logs.")
+        st.markdown("""
+        **Expected log file**: `duckel.log`
+        
+        Logs will appear here after you execute a pipeline. Each entry includes:
+        - **Timestamp** - When the event occurred
+        - **Level** - ERROR, WARNING, INFO, or DEBUG
+        - **Component** - Which module generated the log
+        - **Message** - Details about the event
+        """)
 
 with tab_ai:
     st.header("Ask Jules 🤖")

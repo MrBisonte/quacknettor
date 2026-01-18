@@ -370,6 +370,50 @@ class PostgresTargetAdapter(TargetAdapter):
             return f"INSERT INTO {full_table} SELECT * FROM {relation_sql};"
 
 
+class SnowflakeTargetAdapter(TargetAdapter):
+    """Adapter for Snowflake targets."""
+    
+    def validate(self):
+        if "conn" not in self.config:
+            raise ValueError("Snowflake target requires 'conn'")
+        if "table" not in self.config:
+            raise ValueError("Snowflake target requires 'table'")
+    
+    def attach(self, con):
+        """Attach Snowflake database to DuckDB."""
+        name = self.sanitize_identifier(self.config.get("name", "sftgt"))
+        conn_str = resolve_env_tokens(self.config["conn"])
+        conn_str = resolve_secret_tokens(conn_str)
+        
+        logger.info(f"Attaching Snowflake database as '{name}'")
+        try:
+            con.execute(f"ATTACH '{conn_str}' AS {name} (TYPE snowflake);")
+        except Exception as e:
+            logger.error(f"Failed to attach Snowflake: {e}")
+            raise AdapterError(f"Failed to attach Snowflake database: {e}") from e
+    
+    def build_write_sql(self, relation_sql: str) -> str:
+        name = self.sanitize_identifier(self.config.get("name", "sftgt"))
+        table = self.sanitize_identifier(self.config["table"])
+        mode = self.config.get("mode", "append")
+        
+        # Construct fully qualified table name
+        if "." in table:
+            full_table = f"{name}.{table}"
+        else:
+            full_table = f"{name}.{table}"
+        
+        if mode == "overwrite":
+            logger.info(f"Overwriting Snowflake table: {full_table}")
+            return f"""
+            DROP TABLE IF EXISTS {full_table};
+            CREATE TABLE {full_table} AS SELECT * FROM {relation_sql};
+            """
+        else:
+            logger.info(f"Appending to Snowflake table: {full_table}")
+            return f"INSERT INTO {full_table} SELECT * FROM {relation_sql};"
+
+
 # ===== FACTORY FUNCTIONS =====
 
 def create_source_adapter(config: dict) -> SourceAdapter:
@@ -419,12 +463,14 @@ def create_target_adapter(config: dict) -> TargetAdapter:
         "parquet": ParquetTargetAdapter,
         "csv": CSVTargetAdapter,
         "postgres": PostgresTargetAdapter,
+        "snowflake": SnowflakeTargetAdapter,
     }
     
     if target_type not in adapters:
         raise ValueError(f"Unsupported target type: {target_type}")
     
     return adapters[target_type](config)
+
 
 
 # ===== LEGACY COMPATIBILITY FUNCTIONS =====
