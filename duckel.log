@@ -1,0 +1,42 @@
+2026-01-18 01:54:52 | WARNING  | duckel.jules | Jules API Key not found. AI features will be disabled.
+2026-01-18 01:54:55 | INFO     | duckel | Loading configuration from pipelines.yml
+2026-01-18 01:54:55 | WARNING  | duckel | Environment variable PG_PASSWORD not found
+2026-01-18 01:54:55 | WARNING  | duckel | Environment variable PG_PASSWORD not found
+2026-01-18 01:54:55 | WARNING  | duckel | Environment variable SF_PASSWORD account=myaccount warehouse=mywh database=mydb schema=public not found
+2026-01-18 01:54:55 | INFO     | duckel | Loaded 7 pipelines
+2026-01-18 01:54:55 | WARNING  | duckel.jules | Jules API Key not found. AI features will be disabled.
+2026-01-18 22:07:04 | INFO     | duckel | Loading configuration from pipelines.yml
+2026-01-18 22:07:04 | WARNING  | duckel | Environment variable PG_PASSWORD not found
+2026-01-18 22:07:04 | WARNING  | duckel | Environment variable PG_PASSWORD not found
+2026-01-18 22:07:04 | WARNING  | duckel | Environment variable SF_PASSWORD account=myaccount warehouse=mywh database=mydb schema=public not found
+2026-01-18 22:07:04 | INFO     | duckel | Loaded 7 pipelines
+2026-01-18 22:07:04 | WARNING  | duckel.jules | Jules API Key not found. AI features will be disabled.
+2026-01-18 22:07:06 | WARNING  | duckel.jules | Jules API Key not found. AI features will be disabled.
+2026-01-18 22:07:10 | WARNING  | duckel.jules | Jules API Key not found. AI features will be disabled.
+2026-01-18 22:10:26 | INFO     | duckel | ============================================================
+2026-01-18 22:10:26 | INFO     | duckel | Starting pipeline execution: custom_parquet_to_parquet
+2026-01-18 22:10:26 | INFO     | duckel | Source: parquet
+2026-01-18 22:10:26 | INFO     | duckel | Target: parquet
+2026-01-18 22:10:26 | INFO     | duckel | ============================================================
+2026-01-18 22:10:26 | INFO     | duckel | Initializing DuckDB engine (threads=4, memory=2GB)
+2026-01-18 22:10:27 | INFO     | duckel | Loaded extension: postgres
+2026-01-18 22:10:27 | INFO     | duckel | Loaded extension: httpfs
+2026-01-18 22:10:27 | INFO     | duckel | Loaded optional extension: snowflake
+2026-01-18 22:10:27 | INFO     | duckel | S3 credentials not found - will attempt to use IAM role
+2026-01-18 22:10:27 | INFO     | duckel | Initializing adapters...
+2026-01-18 22:10:27 | INFO     | duckel | Attaching data sources...
+2026-01-18 22:10:27 | INFO     | duckel | Checking schema synchronization...
+2026-01-18 22:10:27 | INFO     | duckel | No incremental filtering applied.
+2026-01-18 22:10:27 | INFO     | duckel | Counting rows...
+2026-01-18 22:10:27 | INFO     | duckel | Row count: 50 (0.00s)
+2026-01-18 22:10:27 | INFO     | duckel | Sampling 50 rows...
+2026-01-18 22:10:29 | INFO     | duckel | Sampled 50 rows (2.06s)
+2026-01-18 22:10:29 | INFO     | duckel | Generating summary statistics...
+2026-01-18 22:10:29 | INFO     | duckel | Generated summary (0.01s)
+2026-01-18 22:10:29 | INFO     | duckel | Writing data to target...
+2026-01-18 22:10:29 | INFO     | duckel | Write completed (0.00s)
+2026-01-18 22:10:29 | INFO     | duckel | ============================================================
+2026-01-18 22:10:29 | INFO     | duckel | Pipeline completed successfully in 2.27s
+2026-01-18 22:10:29 | INFO     | duckel | Rows processed: 50
+2026-01-18 22:10:29 | INFO     | duckel | ============================================================
+2026-01-18 22:10:30 | WARNING  | duckel.jules | Jules API Key not found. AI features will be disabled.
