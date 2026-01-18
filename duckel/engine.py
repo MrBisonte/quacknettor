@@ -84,7 +84,11 @@ class DuckDBEngine:
         for ext in optional_extensions:
             try:
                 logger.debug(f"Installing optional extension: {ext}")
-                self.con.execute(f"INSTALL {ext};")
+                # Snowflake is a community extension, not in core
+                if ext == "snowflake":
+                    self.con.execute(f"INSTALL {ext} FROM community;")
+                else:
+                    self.con.execute(f"INSTALL {ext};")
                 self.con.execute(f"LOAD {ext};")
                 logger.info(f"Loaded optional extension: {ext}")
             except Exception as e:
