@@ -45,8 +45,10 @@ venv.bak/
 # Project specific
 data/
 out/
+logs/
 *.duckdb
 *.db
+*.log
 
 # OS
 .DS_Store

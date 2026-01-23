@@ -15,11 +15,11 @@ def test_sync_schema_add_column():
     con = MagicMock()
     
     # Mock DESCRIBE calls
-    # 1. Source schema: id (INT), name (VARCHAR), new_col (VARCHAR)
-    # 2. Target schema: id (INT), name (VARCHAR)
+    # 1. Target schema: id (INT), name (VARCHAR) - line 247 in adapters.py
+    # 2. Source schema: id (INT), name (VARCHAR), new_col (VARCHAR) - line 267 in adapters.py
     con.execute.return_value.fetchall.side_effect = [
-        [("id", "INTEGER"), ("name", "VARCHAR"), ("new_col", "VARCHAR")], # Source
-        [("id", "INTEGER"), ("name", "VARCHAR")]                          # Target
+        [("id", "INTEGER"), ("name", "VARCHAR")],                          # Target
+        [("id", "INTEGER"), ("name", "VARCHAR"), ("new_col", "VARCHAR")]  # Source
     ]
     
     relation_sql = "src_table"
@@ -42,8 +42,8 @@ def test_sync_schema_fail_mode():
     
     # Mock mismatch
     con.execute.return_value.fetchall.side_effect = [
-        [("id", "INT"), ("col2", "INT")], # Source
-        [("id", "INT")]                   # Target
+        [("id", "INT")],                   # Target
+        [("id", "INT"), ("col2", "INT")]  # Source
     ]
     
     with pytest.raises(AdapterError, match="Schema mismatch"):
@@ -60,8 +60,16 @@ def test_sync_schema_ignore_mode():
     adapter = PostgresTargetAdapter(config)
     con = MagicMock()
     
-    # No calls should be made to DB in ignore mode
-    assert not con.execute.called
+    # Target exists but has same schema
+    con.execute.return_value.fetchall.side_effect = [
+        [("id", "INT")], # Target
+        [("id", "INT")]  # Source
+    ]
+    
+    adapter.sync_schema(con, "src")
+    
+    # At least Target DESCRIBE should have been called
+    con.execute.assert_called()
 
 def test_sync_schema_override():
     """Test that evolution_override takes precedence."""
@@ -75,8 +83,8 @@ def test_sync_schema_override():
     con = MagicMock()
     
     con.execute.return_value.fetchall.side_effect = [
-        [("id", "INT"), ("new", "INT")], # Source
-        [("id", "INT")]                  # Target
+        [("id", "INT")],                  # Target
+        [("id", "INT"), ("new", "INT")]  # Source
     ]
     
     # Override with evolve

@@ -82,7 +82,7 @@ flowchart TD
 
 3.  **Run the App**:
     ```bash
-    streamlit run app.py
+    streamlit run ui/main.py
     ```
 
 ## Usage
@@ -96,12 +96,15 @@ flowchart TD
 
 ## Project Structure
 
-*   `app.py`: Main Streamlit UI.
-*   `pipelines.yml`: Pipeline configuration definitions.
-*   `pipelines_integration.yml`: Full matrix of 16 integration test pipelines.
+*   `ui/main.py`: Main Streamlit UI.
+*   `configs/`: Centralized configuration directory.
+    *   `configs/pipelines.yml`: Pipeline configuration definitions.
+    *   `configs/pipelines_integration.yml`: Full matrix of 16 integration test pipelines.
+    *   `configs/templates/`: Environment templates.
 *   `duckel/`: Core engine code (Adapters, Models, Runner).
 *   `tests/`: Unit verification suite.
-*   `tests/integration/`: Integration tests for all source/target combinations.
+*   `scripts/`: Utility scripts (data generation).
+*   `logs/`: Execution logs and history.
 *   `docker-compose.yml`: Development infrastructure (Postgres, MinIO/S3).
 
 ---
@@ -130,10 +133,10 @@ This starts:
 
 #### Step 2: Configure Environment Variables
 
-Copy `.env.template` to `.env` and fill in values:
+Copy `configs/templates/.env.template` to `.env` and fill in values:
 
 ```bash
-cp .env.template .env
+cp configs/templates/.env.template .env
 ```
 
 **Required for Postgres/S3 (Docker)**:
@@ -141,7 +144,7 @@ cp .env.template .env
 AWS_ACCESS_KEY_ID=minioadmin
 AWS_SECRET_ACCESS_KEY=minioadmin
 S3_ENDPOINT=http://localhost:9000
-PG_PASSWORD=testpass
+DUCKEL_PG_PASSWORD=testpass
 ```
 
 **Required for Snowflake (optional)**:
@@ -157,7 +160,7 @@ SF_SCHEMA=PUBLIC
 #### Step 3: Generate & Seed Test Data
 
 ```bash
-python tests/generate_test_data.py
+python scripts/generate_data.py
 ```
 
 This creates test data with diverse datatypes (integers, floats, strings, booleans, dates, timestamps) and seeds it to local files, Postgres, and S3.
@@ -172,8 +175,9 @@ Run a specific pipeline from `pipelines_integration.yml`:
 python -c "
 from duckel.config import load_config
 from duckel.runner import PipelineRunner
+import os
 
-pipelines = load_config('pipelines_integration.yml')
+pipelines = load_config(os.path.join('configs', 'pipelines_integration.yml'))
 config = pipelines['integration_local_to_postgres']
 runner = PipelineRunner(config, pipeline_name='integration_local_to_postgres')
 result = runner.run()
@@ -185,10 +189,10 @@ print(f'Rows processed: {result[\"rows\"]}')"
 Launch the Streamlit app and select a pipeline from the dropdown:
 
 ```bash
-streamlit run app.py
+streamlit run ui/main.py
 ```
 
-> **Note**: To see integration pipelines in the UI, modify `app.py` line 77 to load `pipelines_integration.yml` instead of `pipelines.yml`.
+> **Note**: To see integration pipelines in the UI, modify `ui/main.py` to load `configs/pipelines_integration.yml` instead of `configs/pipelines.yml`.
 
 ### 3. Running Integration Tests
 
