@@ -246,4 +246,4 @@ class TestPipelineIntegration:
             result = runner.run()
             
             assert output_path.exists()
-            assert compression.upper() in result["write_sql"]
+            assert compression.lower() in result["write_sql"]

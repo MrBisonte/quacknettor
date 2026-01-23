@@ -18,7 +18,7 @@ from duckel.runner import PipelineRunner
 
 
 # Load integration pipelines
-INTEGRATION_CONFIG = Path(__file__).parent.parent.parent / "pipelines_integration.yml"
+INTEGRATION_CONFIG = Path(__file__).parent.parent.parent / "configs" / "pipelines_integration.yml"
 
 
 def get_pipeline_names():

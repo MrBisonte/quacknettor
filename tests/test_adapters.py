@@ -33,7 +33,7 @@ class TestAdapterBase:
         ]
         
         for identifier in valid_identifiers:
-            result = Adapter.sanitize_identifier(identifier)
+            result = Adapter._sanitize_identifier(identifier)
             assert result == identifier
     
     def test_sanitize_identifier_invalid(self):
@@ -50,7 +50,7 @@ class TestAdapterBase:
         
         for identifier, expected_msg in invalid_identifiers:
             with pytest.raises(ValueError, match=expected_msg):
-                Adapter.sanitize_identifier(identifier)
+                Adapter._sanitize_identifier(identifier)
 
 
 class TestParquetSourceAdapter:
@@ -126,7 +126,7 @@ class TestPostgresSourceAdapter:
             SourceConfig(
                 type="postgres",
                 conn="test",
-                name="pgsrc; DROP DATABASE;--",
+                name="pg_source_attachment; DROP DATABASE;--",
                 object="users"
             )
     
@@ -138,7 +138,7 @@ class TestPostgresSourceAdapter:
             "object": "users"
         })
         sql = adapter.get_relation_sql()
-        assert sql == "pgsrc.users"
+        assert sql == "pg_source_attachment.users"
     
     def test_valid_object_qualified(self):
         """Test qualified table name."""
@@ -148,7 +148,7 @@ class TestPostgresSourceAdapter:
             "object": "public.users"
         })
         sql = adapter.get_relation_sql()
-        assert sql == "pgsrc.public.users"
+        assert sql == "pg_source_attachment.public.users"
     
     def test_valid_query(self):
         """Test custom query."""
@@ -220,7 +220,7 @@ class TestPostgresTargetAdapter:
         
         assert "DROP TABLE IF EXISTS" in sql
         assert "CREATE TABLE" in sql
-        assert "pgtgt.users" in sql
+        assert "pg_target_attachment.users" in sql
     
     def test_write_sql_append_mode(self):
         """Test write SQL in append mode."""
@@ -233,7 +233,7 @@ class TestPostgresTargetAdapter:
         sql = adapter.build_write_sql("source_data")
         
         assert "INSERT INTO" in sql
-        assert "pgtgt.users" in sql
+        assert "pg_target_attachment.users" in sql
 
 
 class TestAdapterFactories:
