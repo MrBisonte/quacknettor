@@ -28,7 +28,7 @@ class Adapter(ABC):
         pass
     
     @staticmethod
-    def sanitize_identifier(identifier: str) -> str:
+    def _sanitize_identifier(identifier: str) -> str:
         """
         Sanitize SQL identifiers to prevent injection.
         
@@ -137,7 +137,7 @@ class PostgresSourceAdapter(SourceAdapter):
     
     def attach(self, con):
         """Attach Postgres database to DuckDB."""
-        name = self.sanitize_identifier(self.config.get("name", "pgsrc"))
+        name = self._sanitize_identifier(self.config.get("name", "pg_source_attachment"))
         conn_str = resolve_env_tokens(self.config["conn"])
         conn_str = resolve_secret_tokens(conn_str)
         
@@ -150,14 +150,14 @@ class PostgresSourceAdapter(SourceAdapter):
             raise AdapterError(f"Failed to attach Postgres database: {e}") from e
     
     def get_relation_sql(self) -> str:
-        name = self.sanitize_identifier(self.config.get("name", "pgsrc"))
+        name = self._sanitize_identifier(self.config.get("name", "pg_source_attachment"))
         
         if "query" in self.config:
             # Custom query - wrap in subquery
             return f"({self.config['query']})"
         
         if "object" in self.config:
-            obj = self.sanitize_identifier(self.config["object"])
+            obj = self._sanitize_identifier(self.config["object"])
             # If object already has schema prefix, use as-is
             if "." in obj:
                 return f"{name}.{obj}"
@@ -176,7 +176,7 @@ class SnowflakeSourceAdapter(SourceAdapter):
     
     def attach(self, con):
         """Attach Snowflake database to DuckDB."""
-        name = self.sanitize_identifier(self.config.get("name", "sfsrc"))
+        name = self._sanitize_identifier(self.config.get("name", "sf_source_attachment"))
         conn_str = resolve_env_tokens(self.config["conn"])
         conn_str = resolve_secret_tokens(conn_str)
         
@@ -188,13 +188,13 @@ class SnowflakeSourceAdapter(SourceAdapter):
             raise AdapterError(f"Failed to attach Snowflake database: {e}") from e
     
     def get_relation_sql(self) -> str:
-        name = self.sanitize_identifier(self.config.get("name", "sfsrc"))
+        name = self._sanitize_identifier(self.config.get("name", "sf_source_attachment"))
         
         if "query" in self.config:
             return f"({self.config['query']})"
         
         if "object" in self.config:
-            obj = self.sanitize_identifier(self.config["object"])
+            obj = self._sanitize_identifier(self.config["object"])
             if "." in obj:
                 return f"{name}.{obj}"
             else:
@@ -350,7 +350,7 @@ class PostgresTargetAdapter(TargetAdapter):
     
     def attach(self, con):
         """Attach Postgres database to DuckDB with categorized error handling."""
-        name = self.sanitize_identifier(self.config.get("name", "pgtgt"))
+        name = self._sanitize_identifier(self.config.get("name", "pg_target_attachment"))
         conn_str = resolve_env_tokens(self.config["conn"])
         conn_str = resolve_secret_tokens(conn_str)
         
@@ -376,8 +376,8 @@ class PostgresTargetAdapter(TargetAdapter):
                 raise AdapterError(f"Failed to attach Postgres database '{name}': {e}") from e
     
     def build_write_sql(self, relation_sql: str) -> str:
-        name = self.sanitize_identifier(self.config.get("name", "pgtgt"))
-        table = self.sanitize_identifier(self.config["table"])
+        name = self._sanitize_identifier(self.config.get("name", "pg_target_attachment"))
+        table = self._sanitize_identifier(self.config["table"])
         mode = self.config.get("mode", "append")
         unique_key = self.config.get("unique_key")
         
@@ -419,7 +419,7 @@ class SnowflakeTargetAdapter(TargetAdapter):
     
     def attach(self, con):
         """Attach Snowflake database to DuckDB with categorized error handling."""
-        name = self.sanitize_identifier(self.config.get("name", "sftgt"))
+        name = self._sanitize_identifier(self.config.get("name", "sf_target_attachment"))
         conn_str = resolve_env_tokens(self.config["conn"])
         conn_str = resolve_secret_tokens(conn_str)
         
@@ -450,8 +450,8 @@ class SnowflakeTargetAdapter(TargetAdapter):
                 raise AdapterError(f"Failed to attach Snowflake database '{name}': {e}") from e
     
     def build_write_sql(self, relation_sql: str) -> str:
-        name = self.sanitize_identifier(self.config.get("name", "sftgt"))
-        table = self.sanitize_identifier(self.config["table"])
+        name = self._sanitize_identifier(self.config.get("name", "sf_target_attachment"))
+        table = self._sanitize_identifier(self.config["table"])
         mode = self.config.get("mode", "append")
         
         # Construct fully qualified table name

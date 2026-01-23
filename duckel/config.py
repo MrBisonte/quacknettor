@@ -13,6 +13,8 @@ from .logger import logger
 load_dotenv()
 
 
+import re
+
 def resolve_env_tokens(s: str) -> str:
     """
     Replace __ENV:VAR tokens with environment variable values.
@@ -26,14 +28,19 @@ def resolve_env_tokens(s: str) -> str:
     if not isinstance(s, str):
         return s
     
-    token = "__ENV:"
-    if token in s:
-        var = s.split(token, 1)[1]
+    pattern = r"__ENV:([A-Z0-9_]+)"
+    matches = re.finditer(pattern, s)
+    
+    result = s
+    for match in matches:
+        token = match.group(0)
+        var = match.group(1)
         value = os.environ.get(var, "")
         if not value:
             logger.warning(f"Environment variable {var} not found")
-        return s.replace(f"{token}{var}", value)
-    return s
+        result = result.replace(token, value)
+    
+    return result
 
 
 def resolve_secret_tokens(s: str) -> str:
@@ -52,15 +59,24 @@ def resolve_secret_tokens(s: str) -> str:
     if not isinstance(s, str):
         return s
     
-    token = "SECRET:"
-    if token in s:
-        secret_name = s.split(token, 1)[1]
+    pattern = r"SECRET:([A-Z0-9_]+)"
+    matches = re.finditer(pattern, s)
+    
+    result = s
+    for match in matches:
+        token = match.group(0)
+        secret_name = match.group(1)
         # TODO: Integrate with AWS Secrets Manager / Azure Key Vault
         value = os.environ.get(secret_name, "")
         if not value:
             logger.warning(f"Secret {secret_name} not found in environment")
-        return value
-    return s
+        
+        # If the entire string is just the token, return the value directly (to preserve type if possible, though here it's still string)
+        if s == token:
+            return value
+        result = result.replace(token, value)
+    
+    return result
 
 
 def resolve_tokens_in_dict(d: dict) -> dict:
@@ -125,3 +141,37 @@ def load_config(path: str) -> Dict[str, PipelineConfig]:
     
     logger.info(f"Loaded {len(validated_pipelines)} pipelines")
     return validated_pipelines
+
+
+def save_pipeline_config(path: str, name: str, config: PipelineConfig) -> None:
+    """
+    Save a pipeline configuration to the YAML file.
+    
+    Args:
+        path: Path to YAML configuration file
+        name: Name of the pipeline
+        config: PipelineConfig object to save
+    """
+    config_path = Path(path)
+    
+    # Read existing config
+    if config_path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+    else:
+        cfg = {"pipelines": {}}
+        
+    if "pipelines" not in cfg:
+        cfg["pipelines"] = {}
+        
+    # Update config
+    # We dump the model to dict, excluding defaults to keep it clean
+    pipeline_dict = config.model_dump(exclude_defaults=True)
+    cfg["pipelines"][name] = pipeline_dict
+    
+    # Write back
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.dump(cfg, f, sort_keys=False, indent=2)
+    
+    logger.info(f"Saved pipeline '{name}' to {path}")
+

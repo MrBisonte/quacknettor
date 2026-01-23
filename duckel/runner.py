@@ -26,7 +26,8 @@ class PipelineRunner:
         self,
         pipeline_config: PipelineConfig,
         overrides: Optional[Dict[str, Any]] = None,
-        pipeline_name: str = "default"
+        pipeline_name: str = "default",
+        progress_callback: Optional[callable] = None
     ):
         """
         Initialize pipeline runner.
@@ -35,11 +36,18 @@ class PipelineRunner:
             pipeline_config: Validated PipelineConfig instance
             overrides: Optional dictionary of runtime option overrides
             pipeline_name: Name of the pipeline for state persistence
+            progress_callback: Optional function(percent: int, message: str) called during execution
         """
         self.config = pipeline_config
         self.options = pipeline_config.get_options(overrides)
         self.pipeline_name = pipeline_name
+        self.progress_callback = progress_callback
         self.metrics: Dict[str, float] = {}
+
+    def _report_progress(self, percent: int, message: str):
+        """Invoke progress callback if configured."""
+        if self.progress_callback:
+            self.progress_callback(percent, message)
 
     def _get_state_path(self) -> Path:
         """Get path to state file."""
@@ -99,6 +107,7 @@ class PipelineRunner:
         logger.info(f"Target: {self.config.target.type}")
         logger.info("=" * 60)
         
+        self._report_progress(5, "🔧 Initializing adapters...")
         start_time = time.perf_counter()
         
         try:
@@ -110,6 +119,8 @@ class PipelineRunner:
                 logger.info("Initializing adapters...")
                 source_adapter = create_source_adapter(self.config.source.model_dump())
                 target_adapter = create_target_adapter(self.config.target.model_dump())
+                
+                self._report_progress(10, "🔗 Attaching sources...")
                 
                 # Attach sources and targets
                 logger.info("Attaching data sources...")
@@ -139,18 +150,21 @@ class PipelineRunner:
                 # Stage 1: Count rows
                 # Note: This counts rows *after* filtering
                 if self.options.compute_counts:
+                    self._report_progress(20, "🔢 Counting rows...")
                     results["rows"] = self._count_rows(con, relation_sql)
                 else:
                     results["rows"] = "N/A"
                 
                 # Stage 2: Sample data
                 if self.options.sample_data:
+                    self._report_progress(30, "🔍 Sampling data...")
                     results["sample"] = self._sample_data(con, relation_sql)
                 else:
                     results["sample"] = None
                 
                 # Stage 3: Summarize data
                 if self.options.compute_summary:
+                    self._report_progress(40, "📊 Generating summary...")
                     results["summary"] = self._summarize_data(con, relation_sql)
                 else:
                     results["summary"] = None
@@ -172,6 +186,7 @@ class PipelineRunner:
                     except Exception as e:
                         logger.warning(f"Failed to calculate new watermark: {e}")
 
+                self._report_progress(50, "🚀 Writing data...")
                 self._execute_write(con, write_sql)
                 
                 # Save watermark after successful write
