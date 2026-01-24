@@ -188,12 +188,16 @@ class TestPostgresTargetAdapter:
     """Test Postgres target adapter."""
     
     def test_requires_conn_and_table(self):
-        """Test that Postgres target requires connection and table."""
+        """Test that Postgres target requires connection for init, and table for write."""
         with pytest.raises(ValueError, match="requires 'conn'"):
             PostgresTargetAdapter({"type": "postgres", "table": "users"})
         
+        # table is optional for init
+        adapter = PostgresTargetAdapter({"type": "postgres", "conn": "test"})
+        
+        # but required for write
         with pytest.raises(ValueError, match="requires 'table'"):
-            PostgresTargetAdapter({"type": "postgres", "conn": "test"})
+            adapter.build_write_sql("source_data")
     
     def test_sql_injection_in_table(self):
         """Test that SQL injection in table name is blocked."""

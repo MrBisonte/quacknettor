@@ -84,11 +84,15 @@ class TestTargetConfig:
         )
         assert config.mode == "overwrite"
     
-    def test_postgres_target_requires_table(self):
-        """Test that Postgres target requires table."""
+    def test_postgres_target_relaxed_table_validation(self):
+        """Test that Postgres target allows missing table during init (for connection testing)."""
         from duckel.adapters import PostgresTargetAdapter
+        # This should NOT raise now
+        adapter = PostgresTargetAdapter({"type": "postgres", "conn": "test"})
+        
+        # But it SHOULD raise when trying to write
         with pytest.raises(ValueError, match="requires 'table'"):
-            PostgresTargetAdapter({"type": "postgres", "conn": "test"})
+            adapter.build_write_sql("source_data")
     
     def test_invalid_mode(self):
         """Test that invalid mode is rejected."""
