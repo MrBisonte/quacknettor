@@ -2,8 +2,8 @@ pipelines:
   pg_to_parquet_local:
     source:
       type: postgres
-      name: pgsrc
-      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD"
+      name: pg_source_attachment
+      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       object: "public.my_table"   # or query: "SELECT ..."
 
     target:
@@ -24,17 +24,18 @@ pipelines:
 
     target:
       type: postgres
-      name: pgtgt
-      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:PG_PASSWORD"
+      name: pg_target_attachment
+      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       table: "public.my_table_copy"
       mode: overwrite             # overwrite|append
 
   snowflake_to_parquet:
      source:
        type: snowflake
+       name: sf_source_attachment
        # Example using password auth. For keypair/browser, the conn string differs.
        # DuckDB snowflake extension uses standard connection string parameters.
-       conn: "user=myuser password=__ENV:SF_PASSWORD account=myaccount warehouse=mywh database=mydb schema=public"
+       conn: "user=myuser password=__ENV:DUCKEL_SF_PASSWORD account=myaccount warehouse=mywh database=mydb schema=public"
        object: "mydb.public.mytable" 
      
      target:
