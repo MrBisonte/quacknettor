@@ -219,5 +219,23 @@ The integration suite covers **16 pipelines** for all combinations:
 
 ---
 
-## License
-MIT
+## Maintainers
+- **bisontezao@outlook.com**
+
+This is a community-developed tool, provided as-is. It comes with no official support or warranty. However, feel free to raise a GitHub issue if you find a bug or would like to suggest a new feature.
+
+## Third Party Packages
+DuckEL's functionality is powered by the following incredible third-party packages and the communities that maintain them:
+- [DuckDB](https://duckdb.org/) - The core analytical engine.
+- [Pandas](https://pandas.pydata.org/) - Data manipulation and analysis.
+- [Streamlit](https://streamlit.io/) - Fast and beautiful UI framework.
+- [Pydantic](https://docs.pydantic.dev/) - Data validation and settings management.
+- [PyYAML](https://pyyaml.org/) - YAML parser and emitter.
+- [Boto3](https://aws.amazon.com/sdk-for-python/) - AWS SDK for Python (S3 support).
+- [Tenacity](https://tenacity.readthedocs.io/) - Retrying library for resilience.
+- [Pytest](https://docs.pytest.org/en/latest/) - Testing framework.
+
+## Legal
+Licensed under the **MIT License**. You may not use this tool except in compliance with the License. You may obtain a copy of the License in the [LICENSE](LICENSE) file or at: [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
