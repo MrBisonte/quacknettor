@@ -3,84 +3,78 @@ pipelines:
     source:
       type: postgres
       name: pg_source_attachment
-      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
-      object: "public.my_table"   # or query: "SELECT ..."
-
+      conn: dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD
+      object: public.my_table
     target:
       type: parquet
-      path: "./out/my_table.parquet"
-      mode: overwrite             # overwrite|append (append needs dataset-style layout)
+      path: ./out/my_table.parquet
+      mode: overwrite
       compression: zstd
-
     options:
       threads: 8
-      memory_limit: "4GB"
+      memory_limit: 4GB
       sample_rows: 200
-
   parquet_to_pg:
     source:
       type: parquet
-      path: "./out/my_table.parquet"
-
+      path: ./out/my_table.parquet
     target:
       type: postgres
       name: pg_target_attachment
-      conn: "dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
-      table: "public.my_table_copy"
-      mode: overwrite             # overwrite|append
-
+      conn: dbname=mydb user=myuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD
+      table: public.my_table_copy
+      mode: overwrite
   snowflake_to_parquet:
-     source:
-       type: snowflake
-       name: sf_source_attachment
-       # Example using password auth. For keypair/browser, the conn string differs.
-       # DuckDB snowflake extension uses standard connection string parameters.
-       conn: "user=myuser password=__ENV:DUCKEL_SF_PASSWORD account=myaccount warehouse=mywh database=mydb schema=public"
-       object: "mydb.public.mytable" 
-     
-     target:
-       type: parquet
-       path: "./out/sf_dump.parquet"
-       mode: overwrite
- 
+    source:
+      type: snowflake
+      name: sf_source_attachment
+      conn: user=myuser password=__ENV:DUCKEL_SF_PASSWORD account=myaccount warehouse=mywh
+        database=mydb schema=public
+      object: mydb.public.mytable
+    target:
+      type: parquet
+      path: ./out/sf_dump.parquet
+      mode: overwrite
   local_parquet_to_parquet:
     source:
       type: parquet
-      path: "./data/inbound/telco_churn_sample.parquet"
-    
+      path: ./data/inbound/telco_churn_sample.parquet
     target:
       type: parquet
-      path: "./data/outbound/telco_churn_copy.parquet"
+      path: ./data/outbound/telco_churn_copy.parquet
       mode: overwrite
-
   s3_to_local_parquet:
     source:
       type: parquet
-      path: "s3://my-bucket/in/telco_churn_sample.parquet"
-
+      path: s3://my-bucket/in/telco_churn_sample.parquet
     target:
       type: parquet
-      path: "./data/outbound/s3_telco_churn_copy.parquet"
+      path: ./data/outbound/s3_telco_churn_copy.parquet
       mode: overwrite
-
   local_to_s3_parquet:
     source:
       type: parquet
-      path: "./data/inbound/telco_churn_sample.parquet"
-
+      path: ./data/inbound/telco_churn_sample.parquet
     target:
       type: parquet
-      path: "s3://my-bucket/out/telco_churn_copy.parquet"
+      path: s3://my-bucket/out/telco_churn_copy.parquet
       mode: overwrite
-
   incremental_parquet_test:
     source:
       type: parquet
-      path: "./tests/data/source.parquet"
-      incremental_key: "updated_at"
-    
+      path: ./tests/data/source.parquet
+      incremental_key: updated_at
     target:
       type: parquet
-      path: "./tests/data/target.parquet"
+      path: ./tests/data/target.parquet
       mode: append
       schema_evolution: evolve
+  custom_parquet_to_postgres:
+    source:
+      type: parquet
+      path: ./data/inbound/
+    target:
+      type: postgres
+      conn: dbname=testdb user=testuser host=127.0.0.1 port=5434 password=testpass
+      name: pg_target_attachment
+      table: public.my_output_table
