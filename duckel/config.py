@@ -128,6 +128,12 @@ def load_config(path: str) -> Dict[str, PipelineConfig]:
     if "pipelines" not in cfg:
         raise ValueError("Missing top-level 'pipelines' key in configuration")
     
+    import json
+    import re
+    raw_str = json.dumps(cfg)
+    if re.search(r'(?i)\b(?:password|pwd)\s*=\s*(?!__ENV:|SECRET:)', raw_str):
+        raise ValueError("Plain-text passwords are not allowed in configurations. Use __ENV:VAR or SECRET:VAR instead.")
+        
     # Resolve environment variables and secrets
     cfg = resolve_tokens_in_dict(cfg)
     

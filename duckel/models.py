@@ -34,13 +34,7 @@ class SourceConfig(BaseModel):
             raise ValueError(f"conn required for {info.data.get('type')} source")
         return v
     
-    @field_validator('conn')
-    @classmethod
-    def validate_secure_conn(cls, v: Optional[str]) -> Optional[str]:
-        """Ensure connection string does not contain plain-text passwords."""
-        if v and re.search(r'(?i)\b(?:password|pwd)\s*=\s*(?!__ENV:|SECRET:)', v):
-            raise ValueError("Plain-text passwords are not allowed in connection strings. Use __ENV:VAR or SECRET:VAR instead.")
-        return v
+
     
     @field_validator('object', 'name')
     @classmethod
@@ -84,14 +78,6 @@ class TargetConfig(BaseModel):
         """Validate that database targets have a connection string."""
         if info.data.get('type') in ['postgres', 'snowflake'] and not v:
             raise ValueError(f"conn required for {info.data.get('type')} target")
-        return v
-    
-    @field_validator('conn')
-    @classmethod
-    def validate_secure_conn(cls, v: Optional[str]) -> Optional[str]:
-        """Ensure connection string does not contain plain-text passwords."""
-        if v and re.search(r'(?i)\b(?:password|pwd)\s*=\s*(?!__ENV:|SECRET:)', v):
-            raise ValueError("Plain-text passwords are not allowed in connection strings. Use __ENV:VAR or SECRET:VAR instead.")
         return v
     
     @field_validator('table')

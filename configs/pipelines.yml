@@ -75,6 +75,6 @@ pipelines:
       path: ./data/inbound/
     target:
       type: postgres
-      conn: dbname=testdb user=testuser host=127.0.0.1 port=5434 password=testpass
+      conn: dbname=testdb user=testuser host=127.0.0.1 port=5434 password=__ENV:DUCKEL_PG_PASSWORD
       name: pg_target_attachment
       table: public.my_output_table
