@@ -1,46 +1,28 @@
-# Refactor: Implement Naming Convention Plan and Reorganize Project Structure
+# PR: Release v1.0.0
 
-## Summary
-This PR modernizes the DuckEL repository by implementing a consistent naming convention and reorganizing the project structure to separate concerns. It addresses technical debt in the core engine and prepares the codebase for future scalability.
+This PR consolidates all final changes for the Quacknettor v1.0.0 release.
 
 ## Changes
 
-### 🏗️ Structural Reorganization
-- **`ui/`**: Created `ui/main.py` (moved from `app.py`) to encapsulate the Streamlit application.
-- **`configs/`**: Created a centralized configuration directory for YAML pipelines and environment templates.
-- **`scripts/`**: Moved utility scripts like `generate_data.py`.
-- **`logs/`**: Created a directory for execution logs, protected by `.gitignore`.
+### 1. Project Governance & Standards
+- Added comprehensive [Naming Conventions](docs/naming_conventions.md) for backend, frontend, and data layers.
+- Updated `README.md` with:
+    - Formalized **Maintainers** section with contact information.
+    - **Third Party Packages** credits with documentation links.
+    - Merged **Legal** section with MIT license compliance text.
 
-### 🔧 Core Refactoring
-- **Adapters (`duckel/adapters.py`)**:
-    - Renamed internal utility methods to `_snake_case` (e.g., `_sanitize_identifier`).
-    - Updated default attachment names (`pg_source_attachment`, `sf_source_attachment`) for clarity.
-- **Configuration (`duckel/config.py`)**:
-    - Fixed environment token resolution bug (`__ENV:VAR`) to correctly handle suffixes.
-    - Standardized internal token parsing logic.
-- **Models (`duckel/models.py`)**:
-    - Enforced consistent field validators.
+### 2. Configuration & Cleanup
+- Standardized `configs/pipelines.yml` (removed ad-hoc comments, organized structure).
+- Improved `.gitignore` to better support the Next.js `web/` project.
 
-### 🖥️ UI Enhancements
-- Updated `ui/main.py` to support the new directory structure.
-- Standardized Session State keys (e.g., `app_started`).
-- Standardized Component keys (e.g., `btn_run_pipeline`).
-- Fixed `ModuleNotFoundError` by correctly adding project root to `sys.path`.
+### 3. Web UI Components
+- Staged initial React components in `web/` for the dashboard integration.
 
-### 📚 Documentation & Cleanup
-- Updated `README.md` with new run instructions (`streamlit run ui/main.py`).
-- Updated `.gitignore` to exclude `*.log` and `logs/` directory.
-- Removed tracking of `duckel.log`.
+## Release Checklist
+- [x] Naming conventions documented.
+- [x] Governance sections in README complete.
+- [x] Infrastructure/Configurations standardized.
+- [x] Version tagging prepared.
 
-## Verification
-- **Unit Tests**: All 75 tests passed.
-    - Updated `test_evolution.py` for new schema validation logic.
-    - Updated `test_config.py` for regex-based token resolution.
-    - Updated `test_runner.py` for case-insensitive compression assertions.
-- **Integration**: Validated using `pytest` against local test environment.
-
-## Checklist
-- [x] Structrual moves completed
-- [x] Code refactoring completed
-- [x] Tests updated and passing
-- [x] Documentation updated
+---
+*Signed-off by the Quacknettor Agent*
