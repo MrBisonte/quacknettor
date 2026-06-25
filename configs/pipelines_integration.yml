@@ -32,7 +32,7 @@ pipelines:
     target:
       type: postgres
       name: pgtgt
-      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       table: "public.local_to_postgres"
       mode: overwrite
 
@@ -75,7 +75,7 @@ pipelines:
     target:
       type: postgres
       name: pgtgt
-      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       table: "public.s3_to_postgres"
       mode: overwrite
 
@@ -97,7 +97,7 @@ pipelines:
     source:
       type: postgres
       name: pgsrc
-      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       object: "public.integration_source"
     target:
       type: parquet
@@ -108,7 +108,7 @@ pipelines:
     source:
       type: postgres
       name: pgsrc
-      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       object: "public.integration_source"
     target:
       type: parquet
@@ -119,12 +119,12 @@ pipelines:
     source:
       type: postgres
       name: pgsrc
-      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       object: "public.integration_source"
     target:
       type: postgres
       name: pgtgt
-      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       table: "public.postgres_to_postgres"
       mode: overwrite
 
@@ -132,7 +132,7 @@ pipelines:
     source:
       type: postgres
       name: pgsrc
-      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       object: "public.integration_source"
     target:
       type: snowflake
@@ -175,7 +175,7 @@ pipelines:
     target:
       type: postgres
       name: pgtgt
-      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=testpass"
+      conn: "dbname=testdb user=testuser host=127.0.0.1 port=5432 password=__ENV:DUCKEL_PG_PASSWORD"
       table: "public.snowflake_to_postgres"
       mode: overwrite
 

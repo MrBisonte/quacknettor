@@ -340,7 +340,7 @@ with st.sidebar:
             source_config["path"] = source_path
         
         elif source_type == "postgres":
-            source_config["name"] = st.text_input("Attachment Name", value="pgsrc", key="src_name")
+            source_config["name"] = st.text_input("Attachment Name", value="pg_source_attachment", key="src_name")
             
             with st.expander("🔐 Connection Details", expanded=True):
                 c1, c2 = st.columns(2)
@@ -388,7 +388,7 @@ with st.sidebar:
                 source_config["object"] = st.text_input("Table/View", value="public.my_table", key="src_obj")
         
         elif source_type == "snowflake":
-            source_config["name"] = st.text_input("Attachment Name", value="sfsrc", key="src_name")
+            source_config["name"] = st.text_input("Attachment Name", value="sf_source_attachment", key="src_name")
             
             with st.expander("🔐 Connection Details", expanded=True):
                 c1, c2 = st.columns(2)
@@ -462,7 +462,7 @@ with st.sidebar:
             target_config["compression"] = st.selectbox("Compression", ["zstd", "snappy", "gzip", "none"], key="tgt_comp")
         
         elif target_type == "postgres":
-            target_config["name"] = st.text_input("Attachment Name", value="pgtgt", key="tgt_name")
+            target_config["name"] = st.text_input("Attachment Name", value="pg_target_attachment", key="tgt_name")
             
             with st.expander("🔐 Connection Details", expanded=True):
                 c1, c2 = st.columns(2)
@@ -508,7 +508,7 @@ with st.sidebar:
                 target_config["table"] = st.text_input("Target Table", value="public.my_output_table", key="tgt_table")
         
         elif target_type == "snowflake":
-            target_config["name"] = st.text_input("Attachment Name", value="sftgt", key="tgt_name")
+            target_config["name"] = st.text_input("Attachment Name", value="sf_target_attachment", key="tgt_name")
 
             with st.expander("🔐 Connection Details", expanded=True):
                 c1, c2 = st.columns(2)

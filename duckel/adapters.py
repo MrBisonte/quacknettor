@@ -235,7 +235,13 @@ class TargetAdapter(Adapter):
         mode = self.config.get("mode", "append")
         
         # Construct full table name
-        target_name = self.config.get("table")
+        target_table = self.config.get("table")
+        if not target_table:
+            # Table is missing. In overwrite mode, this is acceptable during validation/attachment.
+            # However, building write SQL will eventually require it.
+            return
+            
+        target_name = target_table
         adapter_type = self.config.get("type", "database")
         if hasattr(self, "config") and "name" in self.config:
             target_name = f"{self.config['name']}.{target_name}"
@@ -345,8 +351,8 @@ class PostgresTargetAdapter(TargetAdapter):
     def validate(self):
         if "conn" not in self.config:
             raise ValueError("Postgres target requires 'conn'")
-        if "table" not in self.config:
-            raise ValueError("Postgres target requires 'table'")
+        # Note: 'table' is no longer strictly required at validation time
+        # to allow connection testing without a table name.
     
     def attach(self, con):
         """Attach Postgres database to DuckDB with categorized error handling."""
@@ -377,7 +383,11 @@ class PostgresTargetAdapter(TargetAdapter):
     
     def build_write_sql(self, relation_sql: str) -> str:
         name = self._sanitize_identifier(self.config.get("name", "pg_target_attachment"))
-        table = self._sanitize_identifier(self.config["table"])
+        table_name = self.config.get("table")
+        if not table_name:
+            raise ValueError("Postgres target requires 'table' for write operations")
+            
+        table = self._sanitize_identifier(table_name)
         mode = self.config.get("mode", "append")
         unique_key = self.config.get("unique_key")
         
@@ -414,8 +424,7 @@ class SnowflakeTargetAdapter(TargetAdapter):
     def validate(self):
         if "conn" not in self.config:
             raise ValueError("Snowflake target requires 'conn'")
-        if "table" not in self.config:
-            raise ValueError("Snowflake target requires 'table'")
+        # Note: 'table' is no longer strictly required at validation time
     
     def attach(self, con):
         """Attach Snowflake database to DuckDB with categorized error handling."""
@@ -451,7 +460,11 @@ class SnowflakeTargetAdapter(TargetAdapter):
     
     def build_write_sql(self, relation_sql: str) -> str:
         name = self._sanitize_identifier(self.config.get("name", "sf_target_attachment"))
-        table = self._sanitize_identifier(self.config["table"])
+        table_name = self.config.get("table")
+        if not table_name:
+            raise ValueError("Snowflake target requires 'table' for write operations")
+            
+        table = self._sanitize_identifier(table_name)
         mode = self.config.get("mode", "append")
         
         # Construct fully qualified table name

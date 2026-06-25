@@ -37,7 +37,8 @@ def resolve_env_tokens(s: str) -> str:
         var = match.group(1)
         value = os.environ.get(var, "")
         if not value:
-            logger.warning(f"Environment variable {var} not found")
+            logger.error(f"Environment variable {var} not found")
+            raise ValueError(f"Required environment variable '{var}' is not set.")
         result = result.replace(token, value)
     
     return result
@@ -69,7 +70,8 @@ def resolve_secret_tokens(s: str) -> str:
         # TODO: Integrate with AWS Secrets Manager / Azure Key Vault
         value = os.environ.get(secret_name, "")
         if not value:
-            logger.warning(f"Secret {secret_name} not found in environment")
+            logger.error(f"Secret {secret_name} not found in environment")
+            raise ValueError(f"Required secret '{secret_name}' is not set.")
         
         # If the entire string is just the token, return the value directly (to preserve type if possible, though here it's still string)
         if s == token:
@@ -126,6 +128,12 @@ def load_config(path: str) -> Dict[str, PipelineConfig]:
     if "pipelines" not in cfg:
         raise ValueError("Missing top-level 'pipelines' key in configuration")
     
+    import json
+    import re
+    raw_str = json.dumps(cfg)
+    if re.search(r'(?i)\b(?:password|pwd)\s*=\s*(?!__ENV:|SECRET:)', raw_str):
+        raise ValueError("Plain-text passwords are not allowed in configurations. Use __ENV:VAR or SECRET:VAR instead.")
+        
     # Resolve environment variables and secrets
     cfg = resolve_tokens_in_dict(cfg)
     

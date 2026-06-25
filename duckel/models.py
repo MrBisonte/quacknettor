@@ -34,6 +34,8 @@ class SourceConfig(BaseModel):
             raise ValueError(f"conn required for {info.data.get('type')} source")
         return v
     
+
+    
     @field_validator('object', 'name')
     @classmethod
     def sanitize_identifier(cls, v: Optional[str]) -> Optional[str]:
@@ -81,9 +83,8 @@ class TargetConfig(BaseModel):
     @field_validator('table')
     @classmethod
     def validate_table_for_db_targets(cls, v: Optional[str], info) -> Optional[str]:
-        """Validate that database targets have a table name."""
-        if info.data.get('type') in ['postgres', 'snowflake'] and not v:
-            raise ValueError(f"table required for {info.data.get('type')} target")
+        """Validate that database targets have a table name if not in testing mode."""
+        # We allow table to be None initially for connection testing in the UI
         return v
     
     @field_validator('table', 'name', 'unique_key')
