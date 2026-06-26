@@ -1,6 +1,7 @@
-import pandas as pd
-import numpy as np
 import os
+
+import numpy as np
+import pandas as pd
 
 # Create data directory if not exists
 os.makedirs("data", exist_ok=True)
@@ -16,8 +17,10 @@ data = {
     "contract": np.random.choice(["Month-to-month", "One year", "Two year"], n_rows),
     "monthly_charges": np.round(np.random.uniform(20, 120, n_rows), 2),
     "total_charges": np.round(np.random.uniform(100, 8000, n_rows), 2),
-    "payment_method": np.random.choice(["Electronic check", "Mailed check", "Bank transfer", "Credit card"], n_rows),
-    "churn": np.random.choice(["Yes", "No"], n_rows)
+    "payment_method": np.random.choice(
+        ["Electronic check", "Mailed check", "Bank transfer", "Credit card"], n_rows
+    ),
+    "churn": np.random.choice(["Yes", "No"], n_rows),
 }
 
 df = pd.DataFrame(data)

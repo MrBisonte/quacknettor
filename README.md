@@ -1,29 +1,42 @@
-# DuckEL: DuckDB-powered Extract + Load POC
+# duckEL
 
-![CI](https://github.com/MrBisonte/quacknettor/actions/workflows/ci.yml/badge.svg)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/MrBisonte/quacknettor/actions/workflows/ci.yml/badge.svg)](https://github.com/MrBisonte/quacknettor/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 
-DuckEL is a lightweight, high-performance Extract and Load (EL) tool powered by **DuckDB**. It supports **Incremental Loading** (watermarking/upsert) and **Schema Evolution** across various sources and targets.
+A lightweight, DuckDB-powered **Extract & Load (EL)** tool with **incremental loading**
+(watermark / upsert) and **schema evolution** across Parquet, PostgreSQL, Snowflake, and S3.
 
-![DuckEL UI](assets/app_screenshot.png)
+> **Status: Experimental.** A personal project, built to explore DuckDB as an EL engine.
+> It works for the pipelines described below, but APIs and behavior may change, and it
+> is provided as-is with no guarantees. Feedback and issues are welcome.
+
+> **Naming:** the project is branded **duckEL**; the importable Python package is `duckel`;
+> the GitHub repository is `quacknettor`.
+
+## What it does
+
+- **Incremental loading** — track a watermark column (e.g. `updated_at`) to move only new or
+  changed rows, in `append` or `upsert` mode.
+- **Schema evolution** — detect source schema changes and evolve the target (e.g. add missing
+  columns) instead of failing.
+- **Adapters** — PostgreSQL, Snowflake, and Parquet/CSV (local or S3), all driven through DuckDB.
+- **Streamlit UI** — pick a pipeline, run it, and inspect row counts, samples, and logs.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    %% Use classes to style nodes
     classDef db fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef file fill:#fff3e0,stroke:#e65100,stroke-width:2px;
     classDef core fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
     classDef ui fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,rx:10,ry:10;
-    classDef ai fill:#fff,stroke:#ea4335,stroke-width:2px,stroke-dasharray: 5 5;
 
     User((🧑‍💻 User))
 
     subgraph App_Layer [Streamlit Application]
         direction TB
         UI[🖥️ Streamlit Frontend]:::ui
-        Jules[🤖 Jules AI Assistant]:::ai
         Runner[⚙️ Pipeline Runner]:::core
     end
 
@@ -46,14 +59,10 @@ flowchart TD
         PQ_Out{{📜 Parquet Files}}:::file
     end
 
-    %% Interactions
     User -->|Config & Run| UI
-    User -.->|Ask for Help| Jules
-    Jules -.->|Suggest Pipeline| UI
     UI -->|Execute| Runner
     Runner -->|Orchestrate| DuckDB_Engine
 
-    %% Data Flow
     PG_Src & SF_Src & PQ_Src ==> Attach
     Attach ==> Schema
     Schema ==> Compute
@@ -61,163 +70,113 @@ flowchart TD
     Write ==> PG_Out & SF_Out & PQ_Out
 ```
 
-### Key Components
-
-*   **Incremental Loading**: Track the last watermark (e.g., `updated_at` column) to only load new or modified records. Supports `append` and `upsert` modes.
-*   **Schema Evolution**: Automatically detect source schema changes and evolve the target table (e.g., adding missing columns).
-*   **Adapters**: Native support for **Postgres**, **Snowflake**, and **Parquet/CSV** (Local or S3).
-*   **Observability**: Integrated log viewer and real-time execution metrics.
-
-### Setup
-
-1.  **Clone & Install**:
-    ```bash
-    git clone https://github.com/MrBisonte/quacknettor.git
-    cd quacknettor
-    pip install .
-    ```
-
-2.  **Configure Environment**:
-    Export variables for your databases (e.g., `PG_PASSWORD`, `SF_PASSWORD`). For AI help, set `JULES_API_KEY`.
-
-3.  **Run the App**:
-    ```bash
-    streamlit run ui/main.py
-    ```
-
-## Usage
-
-1.  **Select Pipeline**: Choose from definitions in `pipelines.yml`.
-2.  **Configure Stages**: Toggle row counts, sampling, or summary statistics.
-3.  **Incremental Controls**: If a pipeline supports incremental keys, you'll see options for **Full Refresh** and the current watermark.
-4.  **Schema Support**: Select whether to `ignore`, `fail`, or `evolve` on schema mismatches.
-5.  **Execute**: Watch the progress bar and analyze the results in the tabs.
-6.  **AI Assistant**: Use the "AI Assistant (Jules)" tab to generate new pipeline YAML or get architectural advice.
-
-## Project Structure
-
-*   `ui/main.py`: Main Streamlit UI.
-*   `configs/`: Centralized configuration directory.
-    *   `configs/pipelines.yml`: Pipeline configuration definitions.
-    *   `configs/pipelines_integration.yml`: Full matrix of 16 integration test pipelines.
-    *   `configs/templates/`: Environment templates.
-*   `duckel/`: Core engine code (Adapters, Models, Runner).
-*   `tests/`: Unit verification suite.
-*   `scripts/`: Utility scripts (data generation).
-*   `logs/`: Execution logs and history.
-*   `docker-compose.yml`: Development infrastructure (Postgres, MinIO/S3).
-
----
-
-## Integration Testing
-
-This section covers running the full integration test suite across all supported source/target combinations.
-
-### Prerequisites
-
-*   **Docker & Docker Compose**: Required for Postgres and MinIO (S3-compatible) services.
-*   **Python 3.9+**: With project dependencies installed.
-*   **Snowflake Account** (optional): Required only for Snowflake-related pipelines.
-
-### 1. Environment Setup
-
-#### Step 1: Start Docker Services
+## Quickstart
 
 ```bash
-docker-compose up -d
-```
+git clone https://github.com/MrBisonte/quacknettor.git
+cd quacknettor
 
-This starts:
-*   **Postgres** on `localhost:5432` (user: `testuser`, pass: `testpass`, db: `testdb`)
-*   **MinIO** on `localhost:9000` (access: `minioadmin`, secret: `minioadmin`, bucket: `testbucket`)
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
-#### Step 2: Configure Environment Variables
+pip install -e ".[dev]"            # editable install + dev tools (pytest, ruff, black)
+# or, for a plain runtime install:  pip install .
 
-Copy `configs/templates/.env.template` to `.env` and fill in values:
-
-```bash
-cp configs/templates/.env.template .env
-```
-
-**Required for Postgres/S3 (Docker)**:
-```env
-AWS_ACCESS_KEY_ID=minioadmin
-AWS_SECRET_ACCESS_KEY=minioadmin
-S3_ENDPOINT=http://localhost:9000
-DUCKEL_PG_PASSWORD=testpass
-```
-
-**Required for Snowflake (optional)**:
-```env
-SF_USER=your_username
-SF_PASSWORD=your_password
-SF_ACCOUNT=your_account
-SF_WAREHOUSE=your_warehouse
-SF_DATABASE=your_database
-SF_SCHEMA=PUBLIC
-```
-
-#### Step 3: Generate & Seed Test Data
-
-```bash
-python scripts/generate_data.py
-```
-
-This creates test data with diverse datatypes (integers, floats, strings, booleans, dates, timestamps) and seeds it to local files, Postgres, and S3.
-
-### 2. Running Pipelines
-
-#### CLI Execution
-
-Run a specific pipeline from `pipelines_integration.yml`:
-
-```bash
-python -c "
-from duckel.config import load_config
-from duckel.runner import PipelineRunner
-import os
-
-pipelines = load_config(os.path.join('configs', 'pipelines_integration.yml'))
-config = pipelines['integration_local_to_postgres']
-runner = PipelineRunner(config, pipeline_name='integration_local_to_postgres')
-result = runner.run()
-print(f'Rows processed: {result[\"rows\"]}')"
-```
-
-#### UI Execution
-
-Launch the Streamlit app and select a pipeline from the dropdown:
-
-```bash
 streamlit run ui/main.py
 ```
 
-> **Note**: To see integration pipelines in the UI, modify `ui/main.py` to load `configs/pipelines_integration.yml` instead of `configs/pipelines.yml`.
+Then configure credentials (see below), pick a pipeline from `configs/pipelines.yml`, and run it.
 
-### 3. Running Integration Tests
+## Configuration
 
-**Docker-only pipelines** (Postgres + S3):
+Pipelines live in `configs/pipelines.yml` and reference secrets via `__ENV:VAR` tokens that are
+resolved from environment variables at load time. Copy the template and fill in your own values:
+
 ```bash
+cp configs/templates/.env.example .env
+```
+
+| Variable | Used for |
+|---|---|
+| `DUCKEL_PG_PASSWORD` | PostgreSQL source/target |
+| `DUCKEL_SF_USER`, `DUCKEL_SF_PASSWORD`, `DUCKEL_SF_ACCOUNT`, `DUCKEL_SF_DATABASE`, `DUCKEL_SF_SCHEMA`, `DUCKEL_SF_WAREHOUSE` | Snowflake source/target |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | S3 Parquet (omit if using an IAM role) |
+
+`.env` is gitignored and is never committed.
+
+## Usage
+
+1. **Select a pipeline** from `configs/pipelines.yml`.
+2. **Configure stages** — toggle row counts, sampling, or summary statistics.
+3. **Incremental controls** — for pipelines with an incremental key, choose **Full Refresh** or
+   continue from the current watermark.
+4. **Schema handling** — `ignore`, `fail`, or `evolve` on a schema mismatch.
+5. **Execute** and inspect the results in the tabs.
+
+## Project structure
+
+```
+duckel/            Core engine: adapters, config, models, runner, scheduler, engine
+ui/main.py         Streamlit application
+configs/           Pipeline definitions and environment templates
+scripts/           Utilities (test-data generation, local Postgres, benchmark)
+tests/             Unit tests + a Docker/Snowflake-gated integration matrix
+docs/              Naming conventions and notes
+ops/               Operations runbook
+```
+
+## Testing
+
+```bash
+pytest -m "not integration"        # unit tests (no external services needed)
+```
+
+The integration matrix exercises every source/target combination but requires Docker (Postgres +
+MinIO) and, for the Snowflake rows, Snowflake credentials. Those tests **skip** when their services
+or credentials are absent, so they do not run in plain CI.
+
+```bash
+docker-compose up -d                                   # Postgres (5432) + MinIO (9000)
+python scripts/generate_data.py                        # seed test data
 pytest tests/integration -m "integration and not snowflake" -v
 ```
 
-**All pipelines** (requires Snowflake credentials):
-```bash
-pytest tests/integration -m integration -v
-```
-
-### 4. Pipeline Matrix
-
-The integration suite covers **16 pipelines** for all combinations:
-
 | Source ↓ / Target → | Local Parquet | S3 Parquet | Postgres | Snowflake |
-|---------------------|---------------|------------|----------|-----------|
-| **Local Parquet**   | ✅            | ✅         | ✅       | ✅        |
-| **S3 Parquet**      | ✅            | ✅         | ✅       | ✅        |
-| **Postgres**        | ✅            | ✅         | ✅       | ✅        |
-| **Snowflake**       | ✅            | ✅         | ✅       | ✅        |
+|---|---|---|---|---|
+| **Local Parquet** | ✓ | ✓ | ✓ | ✓ |
+| **S3 Parquet** | ✓ | ✓ | ✓ | ✓ |
+| **Postgres** | ✓ | ✓ | ✓ | ✓ |
+| **Snowflake** | ✓ | ✓ | ✓ | ✓ |
 
----
+CI runs Ruff, Black, the unit tests, and a pip-audit security scan on every push and pull request.
+
+## Roadmap and limitations
+
+- The `web/` directory holds an early, non-functional Next.js stub; the supported interface today
+  is the Streamlit UI.
+- Snowflake environment variables are referenced with two prefixes across the codebase
+  (`DUCKEL_SF_*` in the adapters, `SF_*` in the integration matrix); unifying them is tracked.
+
+## Maintainers
+
+- **bisontezao@outlook.com**
+
+This is a community-developed tool, provided as-is with no official support or warranty. Feel free
+to open a GitHub issue for a bug or a feature idea.
+
+## Third-party packages
+
+duckEL is built on top of these projects and the communities behind them:
+
+- [DuckDB](https://duckdb.org/) — the core analytical engine
+- [pandas](https://pandas.pydata.org/) — data manipulation
+- [Streamlit](https://streamlit.io/) — the UI framework
+- [Pydantic](https://docs.pydantic.dev/) — config validation
+- [PyYAML](https://pyyaml.org/) — YAML parsing
+- [Boto3](https://aws.amazon.com/sdk-for-python/) — AWS SDK (S3 support)
+- [Tenacity](https://tenacity.readthedocs.io/) — retries and resilience
+- [APScheduler](https://apscheduler.readthedocs.io/) — scheduling
 
 ## License
-MIT
+
+Licensed under the [MIT License](LICENSE).

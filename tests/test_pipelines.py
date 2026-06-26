@@ -1,14 +1,17 @@
 import os
-import pytest
+from urllib.parse import urlparse
+
+import boto3
 import duckdb
 import pandas as pd
-import boto3
-from urllib.parse import urlparse
-from duckel.runner import run_pipeline, PipelineRunner
+import pytest
+
 from duckel.models import PipelineConfig
+from duckel.runner import PipelineRunner, run_pipeline
 
 # Note: Tests for Postgres and Snowflake pipelines are pending.
 # These will be added in a future iteration.
+
 
 @pytest.fixture(scope="module")
 def setup_data():
@@ -16,10 +19,7 @@ def setup_data():
     data_dir = "./data/inbound"
     os.makedirs(data_dir, exist_ok=True)
 
-    df = pd.DataFrame({
-        "a": [1, 2, 3],
-        "b": ["x", "y", "z"]
-    })
+    df = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
 
     file_path = f"{data_dir}/test_data.parquet"
     df.to_parquet(file_path, index=False)
@@ -28,6 +28,7 @@ def setup_data():
 
     if os.path.exists(file_path):
         os.remove(file_path)
+
 
 def test_local_parquet_to_parquet(setup_data):
     """Test the local Parquet to Parquet pipeline using new PipelineRunner."""
@@ -39,9 +40,9 @@ def test_local_parquet_to_parquet(setup_data):
     # Test with new PipelineRunner class
     config = PipelineConfig(
         source={"type": "parquet", "path": in_path},
-        target={"type": "parquet", "path": out_path, "mode": "overwrite"}
+        target={"type": "parquet", "path": out_path, "mode": "overwrite"},
     )
-    
+
     runner = PipelineRunner(config)
     result = runner.run()
 
@@ -53,9 +54,11 @@ def test_local_parquet_to_parquet(setup_data):
 
     os.remove(out_path)
 
+
 # S3 tests are disabled by default to avoid dependency on credentials.
 # To run these, set the S3_TEST_BUCKET environment variable.
 S3_TEST_BUCKET = os.environ.get("S3_TEST_BUCKET")
+
 
 @pytest.mark.skipif(not S3_TEST_BUCKET, reason="S3_TEST_BUCKET not set")
 def test_s3_parquet_to_local(setup_data):
@@ -70,7 +73,7 @@ def test_s3_parquet_to_local(setup_data):
 
     pipeline = {
         "source": {"type": "parquet", "path": s3_path},
-        "target": {"type": "parquet", "path": out_path, "mode": "overwrite"}
+        "target": {"type": "parquet", "path": out_path, "mode": "overwrite"},
     }
 
     result = run_pipeline(pipeline)
@@ -86,7 +89,8 @@ def test_s3_parquet_to_local(setup_data):
     # Clean up S3
     parsed_url = urlparse(s3_path)
     s3 = boto3.client("s3")
-    s3.delete_object(Bucket=parsed_url.netloc, Key=parsed_url.path.lstrip('/'))
+    s3.delete_object(Bucket=parsed_url.netloc, Key=parsed_url.path.lstrip("/"))
+
 
 @pytest.mark.skipif(not S3_TEST_BUCKET, reason="S3_TEST_BUCKET not set")
 def test_local_parquet_to_s3(setup_data):
@@ -96,7 +100,7 @@ def test_local_parquet_to_s3(setup_data):
 
     pipeline = {
         "source": {"type": "parquet", "path": in_path},
-        "target": {"type": "parquet", "path": s3_path, "mode": "overwrite"}
+        "target": {"type": "parquet", "path": s3_path, "mode": "overwrite"},
     }
 
     result = run_pipeline(pipeline)
@@ -111,4 +115,4 @@ def test_local_parquet_to_s3(setup_data):
     # Clean up S3
     parsed_url = urlparse(s3_path)
     s3 = boto3.client("s3")
-    s3.delete_object(Bucket=parsed_url.netloc, Key=parsed_url.path.lstrip('/'))
+    s3.delete_object(Bucket=parsed_url.netloc, Key=parsed_url.path.lstrip("/"))
