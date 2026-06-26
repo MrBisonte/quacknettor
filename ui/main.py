@@ -1,46 +1,48 @@
-import streamlit as st
-import traceback
 import os
-import time
 import sys
+import time
+import traceback
 from pathlib import Path
+
+import streamlit as st
 
 # Add project root to path to find duckel package
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from duckel.config import load_config, save_pipeline_config
-from duckel.config import load_config, save_pipeline_config
-from duckel.runner import PipelineRunner, PipelineExecutionError, run_pipeline
-from duckel.models import PipelineConfig
-from duckel.logger import logger
-from duckel.scheduler import SchedulerManager
 from datetime import datetime, timedelta
-from duckel.jules import JulesClient
+
 import duckdb
+
 from duckel.adapters import create_source_adapter, create_target_adapter
+from duckel.config import load_config, save_pipeline_config
+from duckel.logger import logger
+from duckel.models import PipelineConfig
+from duckel.runner import PipelineRunner, run_pipeline
+from duckel.scheduler import SchedulerManager
 
 st.set_page_config(
     page_title="DuckEL - Data Pipeline Orchestration",
     page_icon="🦆",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 # Custom CSS for premium feel
-st.markdown("""
+st.markdown(
+    """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
+
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
-    
+
     /* Global Background refresh */
     .stApp {
         background-color: #FAFAFA;
     }
-    
+
     /* Cards */
     .card-container, .stMetric {
         background-color: #FFFFFF;
@@ -57,7 +59,7 @@ st.markdown("""
         font-weight: 700;
         letter-spacing: -0.025em;
     }
-    
+
     /* Metrics */
     .stMetric label {
         color: #6B7280;
@@ -107,7 +109,7 @@ st.markdown("""
         gap: 12px;
         font-weight: 500;
     }
-    
+
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
@@ -129,7 +131,7 @@ st.markdown("""
         color: #4F46E5;
         background-color: #EEF2FF;
     }
-    
+
     /* Header Styling */
     .main-header {
         padding: 1rem 0 2rem 0;
@@ -150,12 +152,15 @@ st.markdown("""
         margin: 0;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # --- LANDING PAGE ---
 if "app_started" not in st.session_state:
     # Custom Start Button Style
-    st.markdown("""
+    st.markdown(
+        """
     <style>
         .stButton button[kind="primary"] {
             padding: 0.75rem 2rem;
@@ -187,25 +192,35 @@ if "app_started" not in st.session_state:
             border-radius: 12px;
         }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Hero Section
-    st.markdown("""
+    st.markdown(
+        """
     <div style="text-align: center; padding: 4rem 0 3rem 0;">
         <h1 style="text-align: center; font-size: 3.5rem; margin-bottom: 1rem; background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
             Welcome to DuckEL
         </h1>
         <p style="text-align: center; font-size: 1.25rem; color: #6B7280; max-width: 600px; margin: 0 auto;">
-            The enterprise-grade orchestration engine for modern data teams. 
+            The enterprise-grade orchestration engine for modern data teams.
             Move data between Parquet, Postgres, and Snowflake with lightning speed.
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Call to Action
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("🚀 Start New Pipeline", type="primary", use_container_width=True, key="btn_start_pipeline"):
+        if st.button(
+            "🚀 Start New Pipeline",
+            type="primary",
+            use_container_width=True,
+            key="btn_start_pipeline",
+        ):
             st.session_state["app_started"] = True
             st.rerun()
 
@@ -213,9 +228,10 @@ if "app_started" not in st.session_state:
 
     # Feature Grid
     c1, c2, c3 = st.columns(3)
-    
+
     with c1:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="feature-card">
             <div class="feature-icon" style="background: transparent;">
                 <img src="https://duckdb.org/images/logo-dl/DuckDB_Logo-stacked.svg" width="60" alt="DuckDB Logo">
@@ -223,25 +239,33 @@ if "app_started" not in st.session_state:
             <h3>Powered by DuckDB</h3>
             <p style="color: #6B7280;">Leverage the world's fastest in-process SQL OLAP DBMS for lightning-fast transformations.</p>
         </div>
-        """, unsafe_allow_html=True)
-        
+        """,
+            unsafe_allow_html=True,
+        )
+
     with c2:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="feature-card">
             <div class="feature-icon">🔌</div>
             <h3>Universal Connectors</h3>
             <p style="color: #6B7280;">Seamlessly move data between local Parquet storage, PostgreSQL, and Snowflake warehouses.</p>
         </div>
-        """, unsafe_allow_html=True)
-        
+        """,
+            unsafe_allow_html=True,
+        )
+
     with c3:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="feature-card">
-            <div class="feature-icon">🤖</div>
-            <h3>AI Assisted</h3>
-            <p style="color: #6B7280;">Integrated Jules AI agent to help you generate pipelines and debug complex data flows.</p>
+            <div class="feature-icon">🔁</div>
+            <h3>Incremental &amp; Evolving</h3>
+            <p style="color: #6B7280;">Watermark-based incremental loads with append or upsert, plus automatic schema evolution on the target.</p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     st.markdown("<div style='height: 4rem;'></div>", unsafe_allow_html=True)
 
@@ -249,32 +273,34 @@ if "app_started" not in st.session_state:
     st.subheader("🕑 Recent Activity")
     try:
         import pandas as pd
+
         hist_path = os.path.join("logs", "history.csv")
         if os.path.exists(hist_path):
             df = pd.read_csv(hist_path)
             # Show last 5, newest first
             st.dataframe(
-                df.tail(5).iloc[::-1], 
+                df.tail(5).iloc[::-1],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     "timestamp": "Execution Time",
-                    "pipeline": "Pipeline Name", 
+                    "pipeline": "Pipeline Name",
                     "rows": st.column_config.NumberColumn("Rows Processed"),
                     "duration_s": st.column_config.NumberColumn("Duration (s)", format="%.2f"),
-                    "status": st.column_config.TextColumn("Status")
-                }
+                    "status": st.column_config.TextColumn("Status"),
+                },
             )
         else:
             st.info("No recent pipeline executions found. Start your first job today!")
-    except Exception as e:
+    except Exception:
         st.warning("Could not load recent history.")
 
     # Stop execution here so we don't render the rest of the app
     st.stop()
 
 # Header
-st.markdown("""
+st.markdown(
+    """
 <div class="main-header" style="display: flex; align-items: center; gap: 20px;">
     <img src="https://duckdb.org/images/logo-dl/DuckDB_Logo-horizontal.svg" height="40" alt="DuckDB Logo">
     <div style="border-left: 1px solid #E5E7EB; padding-left: 20px;">
@@ -282,27 +308,29 @@ st.markdown("""
         <p style="font-size: 0.875rem; color: #6B7280; margin: 0;">Enterprise-grade data movement</p>
     </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 @st.cache_resource
 def get_scheduler():
     return SchedulerManager()
+
 
 scheduler = get_scheduler()
 
 # Sidebar
 with st.sidebar:
     st.header("🛠️ Pipeline Setup")
-    
+
     # Mode selector
     config_mode = st.radio(
-        "Configuration Mode",
-        ["📋 Preset Pipeline", "🔧 Custom Source/Target"],
-        horizontal=True
+        "Configuration Mode", ["📋 Preset Pipeline", "🔧 Custom Source/Target"], horizontal=True
     )
-    
+
     st.divider()
-    
+
     if config_mode == "📋 Preset Pipeline":
         # Traditional pipeline selection
         try:
@@ -310,38 +338,38 @@ with st.sidebar:
         except Exception as e:
             st.error(f"❌ Failed to load configuration: {e}")
             st.stop()
-        
+
         pipeline_name = st.selectbox(
             "Select Pipeline",
             options=list(pipelines.keys()),
-            help="Choose a configured pipeline to execute"
+            help="Choose a configured pipeline to execute",
         )
         pipeline_config = pipelines[pipeline_name]
-    
+
     else:
         # Custom source/target configuration
         st.subheader("📥 Source Configuration")
-        
+
         source_type = st.selectbox(
-            "Source Type",
-            ["parquet", "postgres", "snowflake"],
-            key="src_type"
+            "Source Type", ["parquet", "postgres", "snowflake"], key="src_type"
         )
-        
+
         source_config = {"type": source_type}
-        
+
         if source_type == "parquet":
             source_path = st.text_input(
                 "Source Path",
                 value="./data/inbound/",
                 help="Local path or s3://bucket/path",
-                key="src_path"
+                key="src_path",
             )
             source_config["path"] = source_path
-        
+
         elif source_type == "postgres":
-            source_config["name"] = st.text_input("Attachment Name", value="pg_source_attachment", key="src_name")
-            
+            source_config["name"] = st.text_input(
+                "Attachment Name", value="pg_source_attachment", key="src_name"
+            )
+
             with st.expander("🔐 Connection Details", expanded=True):
                 c1, c2 = st.columns(2)
                 with c1:
@@ -350,11 +378,18 @@ with st.sidebar:
                     pg_db = st.text_input("Database", value="mydb", key="src_pg_db")
                 with c2:
                     pg_port = st.text_input("Port", value="5432", key="src_pg_port")
-                    pg_pass = st.text_input("Password", value="__ENV:DUCKEL_PG_PASSWORD", type="password", key="src_pg_pass")
+                    pg_pass = st.text_input(
+                        "Password",
+                        value="__ENV:DUCKEL_PG_PASSWORD",
+                        type="password",
+                        key="src_pg_pass",
+                    )
 
             # Construct connection string internally
-            source_config["conn"] = f"dbname={pg_db} user={pg_user} host={pg_host} port={pg_port} password={pg_pass}"
-            
+            source_config["conn"] = (
+                f"dbname={pg_db} user={pg_user} host={pg_host} port={pg_port} password={pg_pass}"
+            )
+
             c_test, c_disc = st.columns([1, 1])
             with c_test:
                 if st.button("🔌 Test Connection", key="test_src_pg", use_container_width=True):
@@ -368,7 +403,9 @@ with st.sidebar:
                         st.error(f"❌ Connection Failed: {e}")
 
             with c_disc:
-                if st.button("🔍 Fetch Tables", key="fetch_src_pg", type="primary", use_container_width=True):
+                if st.button(
+                    "🔍 Fetch Tables", key="fetch_src_pg", type="primary", use_container_width=True
+                ):
                     try:
                         with st.spinner("Fetching tables..."):
                             t_con = duckdb.connect()
@@ -383,26 +420,49 @@ with st.sidebar:
                         st.error(f"Fetch failed: {e}")
 
             if st.session_state.get("src_pg_tables"):
-                source_config["object"] = st.selectbox("Select Table/View", options=st.session_state["src_pg_tables"], key="src_obj_sel")
+                source_config["object"] = st.selectbox(
+                    "Select Table/View",
+                    options=st.session_state["src_pg_tables"],
+                    key="src_obj_sel",
+                )
             else:
-                source_config["object"] = st.text_input("Table/View", value="public.my_table", key="src_obj")
-        
+                source_config["object"] = st.text_input(
+                    "Table/View", value="public.my_table", key="src_obj"
+                )
+
         elif source_type == "snowflake":
-            source_config["name"] = st.text_input("Attachment Name", value="sf_source_attachment", key="src_name")
-            
+            source_config["name"] = st.text_input(
+                "Attachment Name", value="sf_source_attachment", key="src_name"
+            )
+
             with st.expander("🔐 Connection Details", expanded=True):
                 c1, c2 = st.columns(2)
                 with c1:
-                    sf_account = st.text_input("Account", value="__ENV:DUCKEL_SF_ACCOUNT", key="src_sf_acc")
+                    sf_account = st.text_input(
+                        "Account", value="__ENV:DUCKEL_SF_ACCOUNT", key="src_sf_acc"
+                    )
                     sf_user = st.text_input("User", value="__ENV:DUCKEL_SF_USER", key="src_sf_user")
-                    sf_warehouse = st.text_input("Warehouse", value="__ENV:DUCKEL_SF_WAREHOUSE", key="src_sf_wh")
+                    sf_warehouse = st.text_input(
+                        "Warehouse", value="__ENV:DUCKEL_SF_WAREHOUSE", key="src_sf_wh"
+                    )
                 with c2:
-                    sf_database = st.text_input("Database", value="__ENV:DUCKEL_SF_DATABASE", key="src_sf_db")
-                    sf_schema = st.text_input("Schema", value="__ENV:DUCKEL_SF_SCHEMA", key="src_sf_sch")
-                    sf_pass = st.text_input("Password", value="__ENV:DUCKEL_SF_PASSWORD", type="password", key="src_sf_pass")
+                    sf_database = st.text_input(
+                        "Database", value="__ENV:DUCKEL_SF_DATABASE", key="src_sf_db"
+                    )
+                    sf_schema = st.text_input(
+                        "Schema", value="__ENV:DUCKEL_SF_SCHEMA", key="src_sf_sch"
+                    )
+                    sf_pass = st.text_input(
+                        "Password",
+                        value="__ENV:DUCKEL_SF_PASSWORD",
+                        type="password",
+                        key="src_sf_pass",
+                    )
 
-            source_config["conn"] = f"user={sf_user} password={sf_pass} account={sf_account} warehouse={sf_warehouse} database={sf_database} schema={sf_schema}"
-            
+            source_config["conn"] = (
+                f"user={sf_user} password={sf_pass} account={sf_account} warehouse={sf_warehouse} database={sf_database} schema={sf_schema}"
+            )
+
             c_test, c_disc = st.columns([1, 1])
             with c_test:
                 if st.button("🔌 Test Connection", key="test_src_sf", use_container_width=True):
@@ -414,9 +474,11 @@ with st.sidebar:
                             st.success("✅ Connection Successful!")
                     except Exception as e:
                         st.error(f"❌ Connection Failed: {e}")
-            
+
             with c_disc:
-                if st.button("🔍 Fetch Tables", key="fetch_src_sf", type="primary", use_container_width=True):
+                if st.button(
+                    "🔍 Fetch Tables", key="fetch_src_sf", type="primary", use_container_width=True
+                ):
                     try:
                         with st.spinner("Fetching tables..."):
                             t_con = duckdb.connect()
@@ -430,40 +492,48 @@ with st.sidebar:
                         st.error(f"Fetch failed: {e}")
 
             if st.session_state.get("src_sf_tables"):
-                 source_config["object"] = st.selectbox("Select Table/View", options=st.session_state["src_sf_tables"], key="src_sf_sel")
+                source_config["object"] = st.selectbox(
+                    "Select Table/View", options=st.session_state["src_sf_tables"], key="src_sf_sel"
+                )
             else:
-                 source_config["object"] = st.text_input("Table/View", value="PUBLIC.my_table", key="src_obj")
-        
+                source_config["object"] = st.text_input(
+                    "Table/View", value="PUBLIC.my_table", key="src_obj"
+                )
+
         # Incremental key (optional)
         with st.expander("⏱️ Incremental Options"):
-            inc_key = st.text_input("Incremental Key Column", value="", placeholder="e.g., updated_at")
+            inc_key = st.text_input(
+                "Incremental Key Column", value="", placeholder="e.g., updated_at"
+            )
             if inc_key:
                 source_config["incremental_key"] = inc_key
-        
+
         st.divider()
         st.subheader("📤 Target Configuration")
-        
+
         target_type = st.selectbox(
-            "Target Type",
-            ["parquet", "postgres", "snowflake"],
-            key="tgt_type"
+            "Target Type", ["parquet", "postgres", "snowflake"], key="tgt_type"
         )
-        
+
         target_config = {"type": target_type}
-        
+
         if target_type == "parquet":
             target_path = st.text_input(
                 "Target Path",
                 value="./data/outbound/output.parquet",
                 help="Local path or s3://bucket/path",
-                key="tgt_path"
+                key="tgt_path",
             )
             target_config["path"] = target_path
-            target_config["compression"] = st.selectbox("Compression", ["zstd", "snappy", "gzip", "none"], key="tgt_comp")
-        
+            target_config["compression"] = st.selectbox(
+                "Compression", ["zstd", "snappy", "gzip", "none"], key="tgt_comp"
+            )
+
         elif target_type == "postgres":
-            target_config["name"] = st.text_input("Attachment Name", value="pg_target_attachment", key="tgt_name")
-            
+            target_config["name"] = st.text_input(
+                "Attachment Name", value="pg_target_attachment", key="tgt_name"
+            )
+
             with st.expander("🔐 Connection Details", expanded=True):
                 c1, c2 = st.columns(2)
                 with c1:
@@ -472,10 +542,17 @@ with st.sidebar:
                     pg_db = st.text_input("Database", value="mydb", key="tgt_pg_db")
                 with c2:
                     pg_port = st.text_input("Port", value="5432", key="tgt_pg_port")
-                    pg_pass = st.text_input("Password", value="__ENV:DUCKEL_PG_PASSWORD", type="password", key="tgt_pg_pass")
+                    pg_pass = st.text_input(
+                        "Password",
+                        value="__ENV:DUCKEL_PG_PASSWORD",
+                        type="password",
+                        key="tgt_pg_pass",
+                    )
 
-            target_config["conn"] = f"dbname={pg_db} user={pg_user} host={pg_host} port={pg_port} password={pg_pass}"
-            
+            target_config["conn"] = (
+                f"dbname={pg_db} user={pg_user} host={pg_host} port={pg_port} password={pg_pass}"
+            )
+
             c_test, c_disc = st.columns([1, 1])
             with c_test:
                 if st.button("🔌 Test Connection", key="test_tgt_pg", use_container_width=True):
@@ -487,9 +564,11 @@ with st.sidebar:
                             st.success("✅ Connection Successful!")
                     except Exception as e:
                         st.error(f"❌ Connection Failed: {e}")
-            
+
             with c_disc:
-                if st.button("🔍 Fetch Tables", key="fetch_tgt_pg", type="primary", use_container_width=True):
+                if st.button(
+                    "🔍 Fetch Tables", key="fetch_tgt_pg", type="primary", use_container_width=True
+                ):
                     try:
                         with st.spinner("Fetching tables..."):
                             t_con = duckdb.connect()
@@ -503,26 +582,47 @@ with st.sidebar:
                         st.error(f"Fetch failed: {e}")
 
             if st.session_state.get("tgt_pg_tables"):
-                target_config["table"] = st.selectbox("Target Table", options=st.session_state["tgt_pg_tables"], key="tgt_pg_sel")
+                target_config["table"] = st.selectbox(
+                    "Target Table", options=st.session_state["tgt_pg_tables"], key="tgt_pg_sel"
+                )
             else:
-                target_config["table"] = st.text_input("Target Table", value="public.my_output_table", key="tgt_table")
-        
+                target_config["table"] = st.text_input(
+                    "Target Table", value="public.my_output_table", key="tgt_table"
+                )
+
         elif target_type == "snowflake":
-            target_config["name"] = st.text_input("Attachment Name", value="sf_target_attachment", key="tgt_name")
+            target_config["name"] = st.text_input(
+                "Attachment Name", value="sf_target_attachment", key="tgt_name"
+            )
 
             with st.expander("🔐 Connection Details", expanded=True):
                 c1, c2 = st.columns(2)
                 with c1:
-                    sf_account = st.text_input("Account", value="__ENV:DUCKEL_SF_ACCOUNT", key="tgt_sf_acc")
+                    sf_account = st.text_input(
+                        "Account", value="__ENV:DUCKEL_SF_ACCOUNT", key="tgt_sf_acc"
+                    )
                     sf_user = st.text_input("User", value="__ENV:DUCKEL_SF_USER", key="tgt_sf_user")
-                    sf_warehouse = st.text_input("Warehouse", value="__ENV:DUCKEL_SF_WAREHOUSE", key="tgt_sf_wh")
+                    sf_warehouse = st.text_input(
+                        "Warehouse", value="__ENV:DUCKEL_SF_WAREHOUSE", key="tgt_sf_wh"
+                    )
                 with c2:
-                    sf_database = st.text_input("Database", value="__ENV:DUCKEL_SF_DATABASE", key="tgt_sf_db")
-                    sf_schema = st.text_input("Schema", value="__ENV:DUCKEL_SF_SCHEMA", key="tgt_sf_sch")
-                    sf_pass = st.text_input("Password", value="__ENV:DUCKEL_SF_PASSWORD", type="password", key="tgt_sf_pass")
+                    sf_database = st.text_input(
+                        "Database", value="__ENV:DUCKEL_SF_DATABASE", key="tgt_sf_db"
+                    )
+                    sf_schema = st.text_input(
+                        "Schema", value="__ENV:DUCKEL_SF_SCHEMA", key="tgt_sf_sch"
+                    )
+                    sf_pass = st.text_input(
+                        "Password",
+                        value="__ENV:DUCKEL_SF_PASSWORD",
+                        type="password",
+                        key="tgt_sf_pass",
+                    )
 
-            target_config["conn"] = f"user={sf_user} password={sf_pass} account={sf_account} warehouse={sf_warehouse} database={sf_database} schema={sf_schema}"
-            
+            target_config["conn"] = (
+                f"user={sf_user} password={sf_pass} account={sf_account} warehouse={sf_warehouse} database={sf_database} schema={sf_schema}"
+            )
+
             c_test, c_disc = st.columns([1, 1])
             with c_test:
                 if st.button("🔌 Test Connection", key="test_tgt_sf", use_container_width=True):
@@ -534,9 +634,11 @@ with st.sidebar:
                             st.success("✅ Connection Successful!")
                     except Exception as e:
                         st.error(f"❌ Connection Failed: {e}")
-            
+
             with c_disc:
-                if st.button("🔍 Fetch Tables", key="fetch_tgt_sf", type="primary", use_container_width=True):
+                if st.button(
+                    "🔍 Fetch Tables", key="fetch_tgt_sf", type="primary", use_container_width=True
+                ):
                     try:
                         with st.spinner("Fetching tables..."):
                             t_con = duckdb.connect()
@@ -550,31 +652,43 @@ with st.sidebar:
                         st.error(f"Fetch failed: {e}")
 
             if st.session_state.get("tgt_sf_tables"):
-                target_config["table"] = st.selectbox("Target Table", options=st.session_state["tgt_sf_tables"], key="tgt_sf_sel")
+                target_config["table"] = st.selectbox(
+                    "Target Table", options=st.session_state["tgt_sf_tables"], key="tgt_sf_sel"
+                )
             else:
-                target_config["table"] = st.text_input("Target Table", value="PUBLIC.my_output_table", key="tgt_table")
-        
+                target_config["table"] = st.text_input(
+                    "Target Table", value="PUBLIC.my_output_table", key="tgt_table"
+                )
+
         # Common target options
-        target_config["mode"] = st.selectbox("Write Mode", ["overwrite", "append", "upsert"], key="tgt_mode")
-        
+        target_config["mode"] = st.selectbox(
+            "Write Mode", ["overwrite", "append", "upsert"], key="tgt_mode"
+        )
+
         if target_config["mode"] == "upsert":
-            target_config["unique_key"] = st.text_input("Unique Key", placeholder="e.g., id", key="tgt_ukey")
-        
+            target_config["unique_key"] = st.text_input(
+                "Unique Key", placeholder="e.g., id", key="tgt_ukey"
+            )
+
         # Build pipeline config dynamically
-        from duckel.models import SourceConfig, TargetConfig, PipelineConfig
+        from duckel.models import PipelineConfig, SourceConfig, TargetConfig
+
         try:
             pipeline_config = PipelineConfig(
-                source=SourceConfig(**source_config),
-                target=TargetConfig(**target_config)
+                source=SourceConfig(**source_config), target=TargetConfig(**target_config)
             )
             pipeline_name = f"custom_{source_type}_to_{target_type}"
-            
+
             # Save Preset UI
             with st.expander("💾 Save as Preset"):
-                preset_name = st.text_input("Preset Name", value=pipeline_name, help="Name for pipelines.yml")
+                preset_name = st.text_input(
+                    "Preset Name", value=pipeline_name, help="Name for pipelines.yml"
+                )
                 if st.button("Save to pipelines.yml", key="btn_save_preset"):
                     try:
-                        save_pipeline_config(os.path.join("configs", "pipelines.yml"), preset_name, pipeline_config)
+                        save_pipeline_config(
+                            os.path.join("configs", "pipelines.yml"), preset_name, pipeline_config
+                        )
                         st.success(f"✅ Saved as '{preset_name}'!")
                         st.info("💡 Restart app to see new preset.")
                     except Exception as e:
@@ -583,12 +697,12 @@ with st.sidebar:
         except Exception as e:
             st.error(f"❌ Invalid configuration: {e}")
             st.stop()
-    
+
     st.divider()
-    
+
     # Refresh & Evolution Options
     st.subheader("🔄 Pipeline Controls")
-    
+
     is_incremental = pipeline_config.source.incremental_key is not None
     full_refresh = False
     if is_incremental:
@@ -600,52 +714,35 @@ with st.sidebar:
                 st.write(f"Current Watermark: **{watermark}**")
             else:
                 st.write("Current Watermark: *None*")
-        except:
+        except Exception:
             pass
         full_refresh = st.checkbox("Full Refresh", value=False)
-    
+
     schema_evolution = st.selectbox(
-        "Schema Evolution",
-        options=["ignore", "fail", "evolve"],
-        index=0
+        "Schema Evolution", options=["ignore", "fail", "evolve"], index=0
     )
 
     st.divider()
 
-    # AI Assistant Key
-    st.subheader("🤖 AI Assistant")
-    env_key = os.environ.get("JULES_API_KEY")
-    if not env_key:
-        jules_api_key = st.text_input(
-            "Jules API Key",
-            type="password",
-            help="Enter your JULES_API_KEY to enable AI features"
-        )
-        if jules_api_key:
-            os.environ["JULES_API_KEY"] = jules_api_key
-    else:
-        st.success("✅ AI Key detected")
-
-    st.divider()
-    
     # Runtime toggles
     st.subheader("Runtime Stages")
     compute_counts = st.checkbox("Compute Row Counts", value=True)
     sample_data = st.checkbox("Sample Data Preview", value=True)
     compute_summary = st.checkbox("Generate Summary Stats", value=False)
-    
+
     with st.expander("⚡ Advanced Settings"):
         threads = st.number_input("Threads", min_value=1, max_value=64, value=4)
         memory_limit = st.selectbox("Memory Limit", ["1GB", "2GB", "4GB", "8GB", "16GB"], index=1)
 
 # --- MAIN TABS ---
-tab_run, tab_sched, tab_obs, tab_ai = st.tabs(["🚀 Run Pipeline", "📅 Schedule", "👁️ Pipeline Observation", "🤖 AI Assistant (Jules)"])
+tab_run, tab_sched, tab_obs = st.tabs(["🚀 Run Pipeline", "📅 Schedule", "👁️ Pipeline Observation"])
 
 with tab_run:
     # Visual Lineage
     st.subheader("🔗 Pipeline Flow")
-    
+
     import os
+
     src_info = f"{pipeline_config.source.type.upper()}"
     if hasattr(pipeline_config.source, "object") and pipeline_config.source.object:
         src_info += f"\\n{pipeline_config.source.object}"
@@ -664,7 +761,7 @@ with tab_run:
         tgt_info += f"\\n{name if name else 'FILE'}"
     else:
         tgt_info += "\\nFILE"
-        
+
     mermaid_graph = f"""
     graph LR
         S["{src_info}"] --> D((DuckEL Engine))
@@ -673,9 +770,10 @@ with tab_run:
         style D fill:#FFFBEB,stroke:#F59E0B,stroke-width:2px,color:#451A03
         style T fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#064E3B
     """
-    
+
     # Render using html component since st.markdown doesn't support mermaid locally
     import streamlit.components.v1 as components
+
     components.html(
         f"""
         <script type="module">
@@ -703,11 +801,9 @@ with tab_run:
             "memory_limit": memory_limit,
             "full_refresh": full_refresh,
             "schema_evolution": schema_evolution,
-            "compute_summary": compute_summary
+            "compute_summary": compute_summary,
         }
-        
 
-        
         try:
 
             # Smart Progress Callback
@@ -732,20 +828,21 @@ with tab_run:
                 smart_prog.update(pct, msg)
 
             runner = PipelineRunner(
-                pipeline_config, 
-                overrides, 
+                pipeline_config,
+                overrides,
                 pipeline_name=pipeline_name,
-                progress_callback=progress_handler
+                progress_callback=progress_handler,
             )
-            
+
             # Execute
             result = runner.run()
-            
+
             # Always show completion
             prog_bg.progress(100, text="✅ Done!")
-            
+
             # Results
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="success-box">
                 <span style="font-size: 1.5rem;">✅</span>
                 <div>
@@ -753,12 +850,15 @@ with tab_run:
                     <span style="opacity: 0.9">Processed <strong>{result['rows']:,}</strong> rows in <strong>{result['timings']['total_s']}s</strong></span>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
-            
+            """,
+                unsafe_allow_html=True,
+            )
+
             # Log history
             try:
                 import csv
                 from datetime import datetime
+
                 hist_dir = "logs"
                 if not os.path.exists(hist_dir):
                     os.makedirs(hist_dir)
@@ -768,44 +868,53 @@ with tab_run:
                     writer = csv.writer(f)
                     if not file_exists:
                         writer.writerow(["timestamp", "pipeline", "rows", "duration_s", "status"])
-                    writer.writerow([datetime.now().isoformat(), pipeline_name, result['rows'], result['timings']['total_s'], "SUCCESS"])
+                    writer.writerow(
+                        [
+                            datetime.now().isoformat(),
+                            pipeline_name,
+                            result["rows"],
+                            result["timings"]["total_s"],
+                            "SUCCESS",
+                        ]
+                    )
             except Exception as e:
                 logger.error(f"Failed to log history: {e}")
-            
+
             # Metrics
             cols = st.columns(5)
             metrics_map = {
-                "rows": ("Rows", result['rows']),
+                "rows": ("Rows", result["rows"]),
                 "total_s": ("Total Time", f"{result['timings']['total_s']}s"),
                 "write_s": ("Write Time", f"{result['timings']['write_s']}s"),
                 "count_s": ("Count Time", f"{result['timings']['count_s']}s"),
                 "summary_s": ("Summary Time", f"{result['timings']['summary_s']}s"),
             }
-            
+
             for k, (label, val) in metrics_map.items():
                 with cols[list(metrics_map.keys()).index(k)]:
                     st.metric(label, val)
-                    
+
             if result.get("sample") is not None:
                 st.subheader("🔍 Data Preview")
                 st.dataframe(result["sample"], use_container_width=True)
-                
+
             if result.get("summary") is not None:
                 st.subheader("📊 Summary Statistics")
                 summary_df = result["summary"]
                 st.dataframe(summary_df, use_container_width=True)
-                
+
                 # visualiza distinct counts if available
                 if "approx_unique" in summary_df.columns:
                     st.caption("Approximate Unique Values per Column")
                     st.bar_chart(summary_df.set_index("column_name")["approx_unique"])
-            
+
             with st.expander("📝 SQL Audit"):
                 st.code(result["write_sql"], language="sql")
 
         except Exception as e:
-            prog_bg.empty() # Use prog_bg instead of my_bar
-            st.markdown(f'''
+            prog_bg.empty()  # Use prog_bg instead of my_bar
+            st.markdown(
+                f"""
             <div class="error-box">
                 <span style="font-size: 1.5rem;">❌</span>
                 <div>
@@ -813,48 +922,56 @@ with tab_run:
                     <span style="opacity: 0.9">{str(e)}</span>
                 </div>
             </div>
-            ''', unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
             with st.expander("Traceback"):
                 st.code(traceback.format_exc())
 
 with tab_sched:
     st.header("📅 Schedule Pipeline Pipeline")
     st.info("⚠️ Note: The application must remain running for scheduled jobs to execute.")
-    
+
     c1, c2 = st.columns(2)
     with c1:
         sched_type = st.radio("Schedule Type", ["One-off", "Recurring (Cron)"])
-    
+
     with c2:
         if sched_type == "One-off":
             run_date = st.date_input("Date", value=datetime.now())
             run_time = st.time_input("Time", value=(datetime.now() + timedelta(minutes=5)).time())
             run_dt = datetime.combine(run_date, run_time)
         else:
-            cron_expr = st.text_input("Cron Expression", value="*/30 * * * *", help="Standard cron format")
-            
+            cron_expr = st.text_input(
+                "Cron Expression", value="*/30 * * * *", help="Standard cron format"
+            )
+
     if st.button("➕ Schedule Job"):
         try:
-            # We must pass the raw config dict, not the pydantic model, 
+            # We must pass the raw config dict, not the pydantic model,
             # because run_pipeline constructs the model.
             # However, pipeline_config is a Pydantic model here.
             # Let's dump it.
             job_name = f"{pipeline_name}_{int(time.time())}"
             cfg_dict = pipeline_config.model_dump()
-            
+
             if sched_type == "One-off":
                 if run_dt < datetime.now():
                     st.error("Cannot schedule in the past!")
                 else:
-                    scheduler.schedule_pipeline_run(run_pipeline, cfg_dict, run_at=run_dt, job_id=job_name)
+                    scheduler.schedule_pipeline_run(
+                        run_pipeline, cfg_dict, run_at=run_dt, job_id=job_name
+                    )
                     st.success(f"Scheduled '{job_name}' for {run_dt}")
             else:
                 try:
-                    scheduler.schedule_pipeline_run(run_pipeline, cfg_dict, cron_expr=cron_expr, job_id=job_name)
+                    scheduler.schedule_pipeline_run(
+                        run_pipeline, cfg_dict, cron_expr=cron_expr, job_id=job_name
+                    )
                     st.success(f"Scheduled recurring job '{job_name}' with cron '{cron_expr}'")
                 except Exception as e:
                     st.error(f"Invalid cron expression: {e}")
-                    
+
         except Exception as e:
             st.error(f"Scheduling failed: {e}")
 
@@ -875,9 +992,9 @@ with tab_sched:
 with tab_obs:
     st.header("📊 Logs & Observability")
     st.markdown("Real-time pipeline execution logs with status tracking.")
-    
+
     log_file = "duckel.log"
-    
+
     # Auto-refresh toggle
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
@@ -890,100 +1007,104 @@ with tab_obs:
             if os.path.exists(log_file):
                 open(log_file, "w").close()
             st.rerun()
-    
+
     if auto_refresh:
         import time as _time
+
         _time.sleep(2)
         st.rerun()
-    
+
     st.divider()
-    
+
     if os.path.exists(log_file):
-        with open(log_file, "r") as f:
+        with open(log_file) as f:
             lines = f.readlines()
-        
+
         if lines:
             # Summary metrics
             total_lines = len(lines)
-            error_count = sum(1 for l in lines if "ERROR" in l)
-            warning_count = sum(1 for l in lines if "WARNING" in l)
-            info_count = sum(1 for l in lines if "INFO" in l)
-            
+            error_count = sum(1 for line in lines if "ERROR" in line)
+            warning_count = sum(1 for line in lines if "WARNING" in line)
+            info_count = sum(1 for line in lines if "INFO" in line)
+
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Entries", total_lines)
-            m2.metric("Errors", error_count, delta=None if error_count == 0 else f"{error_count}", delta_color="inverse")
+            m2.metric(
+                "Errors",
+                error_count,
+                delta=None if error_count == 0 else f"{error_count}",
+                delta_color="inverse",
+            )
             m3.metric("Warnings", warning_count)
             m4.metric("Info", info_count)
-            
+
             st.divider()
-            
+
             # Filter options
             filter_col1, filter_col2 = st.columns([1, 3])
             with filter_col1:
-                level_filter = st.selectbox("Filter by Level", ["ALL", "ERROR", "WARNING", "INFO", "DEBUG"])
+                level_filter = st.selectbox(
+                    "Filter by Level", ["ALL", "ERROR", "WARNING", "INFO", "DEBUG"]
+                )
             with filter_col2:
                 search_term = st.text_input("Search logs", placeholder="Enter search term...")
-            
+
             # Filter logs
             filtered_lines = lines
             if level_filter != "ALL":
-                filtered_lines = [l for l in filtered_lines if level_filter in l]
+                filtered_lines = [line for line in filtered_lines if level_filter in line]
             if search_term:
-                filtered_lines = [l for l in filtered_lines if search_term.lower() in l.lower()]
-            
+                filtered_lines = [
+                    line for line in filtered_lines if search_term.lower() in line.lower()
+                ]
+
             # Display logs with syntax highlighting
             st.subheader(f"Log Entries ({len(filtered_lines)} shown)")
-            
+
             # Show last 100 filtered lines, newest first
             display_lines = filtered_lines[-100:][::-1]
-            
+
             for line in display_lines:
                 line = line.strip()
                 if not line:
                     continue
-                
+
                 # Color code by level
                 if "ERROR" in line:
-                    st.markdown(f'<div class="error-box" style="padding:0.5rem;margin:0.2rem 0;font-family:monospace;font-size:0.85rem;">❌ {line}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="error-box" style="padding:0.5rem;margin:0.2rem 0;font-family:monospace;font-size:0.85rem;">❌ {line}</div>',
+                        unsafe_allow_html=True,
+                    )
                 elif "WARNING" in line:
-                    st.markdown(f'<div style="padding:0.5rem;margin:0.2rem 0;background:#fff3cd;border-left:3px solid #ffc107;font-family:monospace;font-size:0.85rem;">⚠️ {line}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="padding:0.5rem;margin:0.2rem 0;background:#fff3cd;border-left:3px solid #ffc107;font-family:monospace;font-size:0.85rem;">⚠️ {line}</div>',
+                        unsafe_allow_html=True,
+                    )
                 elif "INFO" in line:
-                    st.markdown(f'<div class="info-box" style="padding:0.5rem;margin:0.2rem 0;font-family:monospace;font-size:0.85rem;">ℹ️ {line}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="info-box" style="padding:0.5rem;margin:0.2rem 0;font-family:monospace;font-size:0.85rem;">ℹ️ {line}</div>',
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.markdown(f'<div style="padding:0.5rem;margin:0.2rem 0;background:#f8f9fa;border-left:3px solid #6c757d;font-family:monospace;font-size:0.85rem;">🔍 {line}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="padding:0.5rem;margin:0.2rem 0;background:#f8f9fa;border-left:3px solid #6c757d;font-family:monospace;font-size:0.85rem;">🔍 {line}</div>',
+                        unsafe_allow_html=True,
+                    )
         else:
             st.info("Log file exists but is empty. Run a pipeline to generate logs.")
     else:
         st.warning("⚠️ No log file found. Run a pipeline to generate logs.")
-        st.markdown("""
+        st.markdown(
+            """
         **Expected log file**: `duckel.log`
-        
+
         Logs will appear here after you execute a pipeline. Each entry includes:
         - **Timestamp** - When the event occurred
         - **Level** - ERROR, WARNING, INFO, or DEBUG
         - **Component** - Which module generated the log
         - **Message** - Details about the event
-        """)
-
-with tab_ai:
-    st.header("Ask Jules 🤖")
-    st.markdown("Use Google's AI Agent to help you generate pipelines or debug issues.")
-    
-    jules = JulesClient()
-    if not jules.is_configured():
-        st.warning("⚠️ `JULES_API_KEY` not found. Please set it to enable AI features.")
-        st.code("export JULES_API_KEY=...", language="bash")
-    else:
-        prompt = st.text_area("How can Jules help you today?", placeholder="e.g., Create a pipeline to load CSV data from /data to Postgres.")
-        if st.button("Ask Jules"):
-            with st.spinner("Jules is processing..."):
-                resp = jules.create_session(prompt)
-                if "error" in resp:
-                    st.error(resp["error"])
-                else:
-                    st.success("Session initiated!")
-                    st.json(resp)
-                    st.balloons()
+        """
+        )
 
 # Footer
 st.divider()
