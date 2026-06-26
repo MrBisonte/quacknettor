@@ -1,3 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "duckel"
+version = "0.1.0"
+description = "A lightweight, DuckDB-powered Extract & Load (EL) tool with incremental loading and schema evolution."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Alexandre Monteiro", email = "bisontezao@outlook.com" }]
+keywords = ["duckdb", "etl", "elt", "data-engineering", "incremental", "streamlit"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Database",
+]
+dependencies = [
+    "duckdb>=1.2.0",
+    "pyyaml>=6.0.1",
+    "streamlit>=1.42.0",
+    "pandas>=2.2.3",
+    "boto3>=1.36.0",
+    "pydantic>=2.10.0",
+    "python-dotenv>=1.0.1",
+    "tenacity>=9.0.0",
+    "apscheduler>=3.11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+    "pip-audit>=2.8.0",
+    "black>=25.1.0",
+    "ruff>=0.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/MrBisonte/quacknettor"
+Repository = "https://github.com/MrBisonte/quacknettor"
+Issues = "https://github.com/MrBisonte/quacknettor/issues"
+
+[tool.setuptools]
+packages = ["duckel"]
+
 [tool.black]
 line-length = 100
 target-version = ['py39', 'py310', 'py311']
@@ -14,8 +64,6 @@ exclude = '''
 
 [tool.ruff]
 line-length = 100
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501"]  # Line too long (handled by black)
 exclude = [
     ".git",
     ".venv",
@@ -25,16 +73,21 @@ exclude = [
     "htmlcov",
 ]
 
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]  # Line too long (handled by black)
+
+[tool.ruff.lint.per-file-ignores]
+# ui/main.py imports the duckel package after a sys.path bootstrap, so its
+# module-level imports are intentionally not at the very top of the file.
+"ui/main.py" = ["E402"]
+
 [tool.mypy]
 python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false  # Set to true for stricter checking
 ignore_missing_imports = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-v --cov=duckel --cov-report=html --cov-report=term-missing"
 
 [tool.coverage.run]
 source = ["duckel"]
