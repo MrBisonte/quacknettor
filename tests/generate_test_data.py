@@ -4,11 +4,13 @@ Test data generator for integration tests.
 Creates Parquet, CSV, and database tables containing diverse datatypes
 to verify type fidelity across all source/target combinations.
 """
+
 import os
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 # Data directory
 DATA_DIR = Path(__file__).parent / "data"
@@ -17,7 +19,7 @@ DATA_DIR = Path(__file__).parent / "data"
 def generate_test_dataframe(num_rows: int = 100) -> pd.DataFrame:
     """
     Generate a DataFrame with diverse datatypes for testing.
-    
+
     Datatypes covered:
     - Integer (int64)
     - Float (float64)
@@ -27,9 +29,9 @@ def generate_test_dataframe(num_rows: int = 100) -> pd.DataFrame:
     - Date (datetime64[ns] - date only)
     """
     np.random.seed(42)  # Reproducibility
-    
+
     base_date = datetime(2024, 1, 1)
-    
+
     data = {
         "id": list(range(1, num_rows + 1)),
         "int_col": np.random.randint(0, 10000, size=num_rows),
@@ -39,9 +41,9 @@ def generate_test_dataframe(num_rows: int = 100) -> pd.DataFrame:
         "timestamp_col": [base_date + timedelta(seconds=i * 3600) for i in range(num_rows)],
         "date_col": [(base_date + timedelta(days=i % 365)).date() for i in range(num_rows)],
     }
-    
+
     df = pd.DataFrame(data)
-    
+
     # Set explicit types
     df["id"] = df["id"].astype("int64")
     df["int_col"] = df["int_col"].astype("int64")
@@ -49,7 +51,7 @@ def generate_test_dataframe(num_rows: int = 100) -> pd.DataFrame:
     df["bool_col"] = df["bool_col"].astype("bool")
     df["timestamp_col"] = pd.to_datetime(df["timestamp_col"])
     df["date_col"] = pd.to_datetime(df["date_col"])
-    
+
     return df
 
 
@@ -75,17 +77,17 @@ def seed_postgres(df: pd.DataFrame, table_name: str = "test_source"):
     """Seed test data into Postgres."""
     import psycopg2
     from psycopg2.extras import execute_values
-    
+
     conn_str = os.getenv(
-        "PG_CONN_STR",
-        "host=localhost port=5432 dbname=testdb user=testuser password=testpass"
+        "PG_CONN_STR", "host=localhost port=5432 dbname=testdb user=testuser password=testpass"
     )
-    
+
     conn = psycopg2.connect(conn_str)
     cur = conn.cursor()
-    
+
     # Create table
-    cur.execute(f"""
+    cur.execute(
+        f"""
         DROP TABLE IF EXISTS {table_name};
         CREATE TABLE {table_name} (
             id BIGINT PRIMARY KEY,
@@ -96,17 +98,18 @@ def seed_postgres(df: pd.DataFrame, table_name: str = "test_source"):
             timestamp_col TIMESTAMP,
             date_col DATE
         );
-    """)
-    
+    """
+    )
+
     # Insert data
     cols = ["id", "int_col", "float_col", "string_col", "bool_col", "timestamp_col", "date_col"]
     values = [tuple(row) for row in df[cols].values]
     execute_values(cur, f"INSERT INTO {table_name} ({', '.join(cols)}) VALUES %s", values)
-    
+
     conn.commit()
     cur.close()
     conn.close()
-    
+
     print(f"Seeded Postgres table: {table_name} ({len(df)} rows)")
 
 
@@ -114,16 +117,16 @@ def upload_to_minio(filepath: Path, bucket: str = "testbucket", object_name: str
     """Upload a file to MinIO (S3 compatible)."""
     import boto3
     from botocore.client import Config
-    
+
     s3 = boto3.client(
         "s3",
         endpoint_url=os.getenv("S3_ENDPOINT", "http://localhost:9000"),
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin"),
         config=Config(signature_version="s3v4"),
-        region_name="us-east-1"
+        region_name="us-east-1",
     )
-    
+
     object_name = object_name or filepath.name
     s3.upload_file(str(filepath), bucket, object_name)
     print(f"Uploaded to S3: s3://{bucket}/{object_name}")
@@ -133,24 +136,24 @@ def upload_to_minio(filepath: Path, bucket: str = "testbucket", object_name: str
 def main():
     """Generate all test data."""
     print("Generating test data...")
-    
+
     df = generate_test_dataframe(100)
-    
+
     # Local files
     parquet_path = save_parquet(df)
     save_csv(df)
-    
+
     # Optionally seed to services if available
     try:
         seed_postgres(df)
     except Exception as e:
         print(f"Skipping Postgres seed: {e}")
-    
+
     try:
         upload_to_minio(parquet_path)
     except Exception as e:
         print(f"Skipping S3 upload: {e}")
-    
+
     print("Done!")
 
 
