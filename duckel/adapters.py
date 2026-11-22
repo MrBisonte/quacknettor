@@ -8,8 +8,8 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from .config import resolve_env_tokens, resolve_secret_tokens
 from .logger import logger
+from .tokens import resolve_env_tokens, resolve_secret_tokens
 
 
 class AdapterError(Exception):
@@ -498,6 +498,26 @@ class SnowflakeTargetAdapter(TargetAdapter):
             return f"INSERT INTO {full_table} SELECT * FROM {relation_sql};"
 
 
+# ===== REGISTRIES =====
+# Sources and targets are open sets. A new member is one row here plus one adapter class.
+# `duckel/models.py` validates `type` against these keys, so a name with no adapter is refused
+# when the configuration loads.
+
+SOURCES: dict[str, type[SourceAdapter]] = {
+    "parquet": ParquetSourceAdapter,
+    "csv": CSVSourceAdapter,
+    "postgres": PostgresSourceAdapter,
+    "snowflake": SnowflakeSourceAdapter,
+}
+
+TARGETS: dict[str, type[TargetAdapter]] = {
+    "parquet": ParquetTargetAdapter,
+    "csv": CSVTargetAdapter,
+    "postgres": PostgresTargetAdapter,
+    "snowflake": SnowflakeTargetAdapter,
+}
+
+
 # ===== FACTORY FUNCTIONS =====
 
 
@@ -516,17 +536,10 @@ def create_source_adapter(config: dict) -> SourceAdapter:
     """
     source_type = config.get("type")
 
-    adapters = {
-        "parquet": ParquetSourceAdapter,
-        "csv": CSVSourceAdapter,
-        "postgres": PostgresSourceAdapter,
-        "snowflake": SnowflakeSourceAdapter,
-    }
-
-    if source_type not in adapters:
+    if source_type not in SOURCES:
         raise ValueError(f"Unsupported source type: {source_type}")
 
-    return adapters[source_type](config)
+    return SOURCES[source_type](config)
 
 
 def create_target_adapter(config: dict) -> TargetAdapter:
@@ -544,17 +557,10 @@ def create_target_adapter(config: dict) -> TargetAdapter:
     """
     target_type = config.get("type")
 
-    adapters = {
-        "parquet": ParquetTargetAdapter,
-        "csv": CSVTargetAdapter,
-        "postgres": PostgresTargetAdapter,
-        "snowflake": SnowflakeTargetAdapter,
-    }
-
-    if target_type not in adapters:
+    if target_type not in TARGETS:
         raise ValueError(f"Unsupported target type: {target_type}")
 
-    return adapters[target_type](config)
+    return TARGETS[target_type](config)
 
 
 # ===== LEGACY COMPATIBILITY FUNCTIONS =====

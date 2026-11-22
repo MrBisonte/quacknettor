@@ -2,84 +2,21 @@
 Configuration loading and validation using Pydantic.
 """
 
-import os
-import re
 from pathlib import Path
 
 import yaml
-from dotenv import load_dotenv
 
 from .logger import logger
 from .models import PipelineConfig
+from .tokens import resolve_env_tokens, resolve_secret_tokens
 
-# Load environment variables from .env file if it exists
-load_dotenv()
-
-
-def resolve_env_tokens(s: str) -> str:
-    """
-    Replace __ENV:VAR tokens with environment variable values.
-
-    Args:
-        s: String potentially containing __ENV:VAR tokens
-
-    Returns:
-        String with environment variables resolved
-    """
-    if not isinstance(s, str):
-        return s
-
-    pattern = r"__ENV:([A-Z0-9_]+)"
-    matches = re.finditer(pattern, s)
-
-    result = s
-    for match in matches:
-        token = match.group(0)
-        var = match.group(1)
-        value = os.environ.get(var, "")
-        if not value:
-            logger.error(f"Environment variable {var} not found")
-            raise ValueError(f"Required environment variable '{var}' is not set.")
-        result = result.replace(token, value)
-
-    return result
-
-
-def resolve_secret_tokens(s: str) -> str:
-    """
-    Replace SECRET:NAME tokens with environment variable values.
-
-    This is a placeholder for future secret manager integration.
-    Currently resolves from environment variables.
-
-    Args:
-        s: String potentially containing SECRET:NAME tokens
-
-    Returns:
-        String with secrets resolved
-    """
-    if not isinstance(s, str):
-        return s
-
-    pattern = r"SECRET:([A-Z0-9_]+)"
-    matches = re.finditer(pattern, s)
-
-    result = s
-    for match in matches:
-        token = match.group(0)
-        secret_name = match.group(1)
-        # TODO: Integrate with AWS Secrets Manager / Azure Key Vault
-        value = os.environ.get(secret_name, "")
-        if not value:
-            logger.error(f"Secret {secret_name} not found in environment")
-            raise ValueError(f"Required secret '{secret_name}' is not set.")
-
-        # If the entire string is just the token, return the value directly (to preserve type if possible, though here it's still string)
-        if s == token:
-            return value
-        result = result.replace(token, value)
-
-    return result
+__all__ = [
+    "load_config",
+    "resolve_env_tokens",
+    "resolve_secret_tokens",
+    "resolve_tokens_in_dict",
+    "save_pipeline_config",
+]
 
 
 def resolve_tokens_in_dict(d: dict) -> dict:

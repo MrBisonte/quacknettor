@@ -9,11 +9,18 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from .adapters import SOURCES, TARGETS
+
+# The validated names are the keys of the registries in `duckel/adapters.py`: one list.
+# A source or target type with no adapter is refused here, when the configuration loads.
+SourceType = Literal[tuple(SOURCES)]
+TargetType = Literal[tuple(TARGETS)]
+
 
 class SourceConfig(BaseModel):
     """Configuration for data source."""
 
-    type: Literal["postgres", "snowflake", "parquet", "csv", "duckdb"]
+    type: SourceType
     path: Optional[str] = None
     conn: Optional[str] = None
     name: Optional[str] = None
@@ -54,7 +61,7 @@ class SourceConfig(BaseModel):
 class TargetConfig(BaseModel):
     """Configuration for data target."""
 
-    type: Literal["postgres", "snowflake", "parquet", "csv"]
+    type: TargetType
     path: Optional[str] = None
     conn: Optional[str] = None
     name: Optional[str] = None
