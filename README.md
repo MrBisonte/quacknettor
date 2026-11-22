@@ -17,7 +17,7 @@ A lightweight, DuckDB-powered **Extract & Load (EL)** tool with **incremental lo
 ## What it does
 
 - **Incremental loading** — track a watermark column (e.g. `updated_at`) to move only new or
-  changed rows, in `append` or `upsert` mode.
+  changed rows, in `append` mode on a database target, or `upsert` on Postgres.
 - **Schema evolution** — detect source schema changes and evolve the target (e.g. add missing
   columns) instead of failing.
 - **Adapters** — PostgreSQL, Snowflake, and Parquet/CSV (local or S3), all driven through DuckDB.
@@ -103,6 +103,10 @@ cp configs/templates/.env.example .env
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | S3 Parquet (omit if using an IAM role) |
 
 `.env` is gitignored and is never committed.
+
+A target supports the write modes its adapter declares, `modes` in `duckel/adapters.py`. A mode a
+target does not support is refused when the configuration loads, and the message names the modes
+that target does support. A target that sets no mode gets the default its adapter declares.
 
 ## Usage
 

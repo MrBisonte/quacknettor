@@ -6,8 +6,10 @@ Provides secure SQL generation with injection protection.
 
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from enum import Enum
+from typing import Any, ClassVar, Optional
 
+from .errors import ConfigError, ConfigErrorCategory
 from .logger import logger
 from .tokens import resolve_env_tokens, resolve_secret_tokens
 
@@ -16,6 +18,39 @@ class AdapterError(Exception):
     """Raised when adapter encounters an error."""
 
     pass
+
+
+class WriteMode(str, Enum):
+    """How a write treats the rows the target already holds."""
+
+    OVERWRITE = "overwrite"
+    APPEND = "append"
+    UPSERT = "upsert"
+
+
+def require_mode(target: str, modes: frozenset, mode: str) -> WriteMode:
+    """
+    The write mode a configuration names, when the target declares it.
+
+    Args:
+        target: Target type, for the message
+        modes: The modes the target declares
+        mode: The mode the configuration names
+
+    Returns:
+        The mode as a WriteMode
+
+    Raises:
+        ConfigError: If the target does not declare the mode
+    """
+    if mode not in {m.value for m in modes}:
+        supported = ", ".join(sorted(m.value for m in modes))
+        raise ConfigError(
+            ConfigErrorCategory.UNSUPPORTED_MODE,
+            f"A {target} target does not support mode '{mode}'.",
+            f"Use one of the modes a {target} target supports: {supported}.",
+        )
+    return WriteMode(mode)
 
 
 class Adapter(ABC):
@@ -213,6 +248,22 @@ class SnowflakeSourceAdapter(SourceAdapter):
 class TargetAdapter(Adapter):
     """Base class for target adapters."""
 
+    # The write modes this target supports, declared as data by each target. A configuration
+    # that names any other mode is refused when it loads, see `TargetConfig` in models.py.
+    modes: ClassVar[frozenset[WriteMode]]
+
+    # The mode of a target whose configuration names none, declared as data by each target.
+    default_mode: ClassVar[WriteMode]
+
+    def __init__(self, config: dict):
+        super().__init__(config)
+        # A target built from a plain dict never passed `TargetConfig`, so it is checked here too.
+        self.mode = require_mode(
+            config.get("type") or type(self).__name__,
+            self.modes,
+            config.get("mode") or self.default_mode.value,
+        )
+
     @abstractmethod
     def attach(self, con):
         """Attach target to DuckDB connection if needed."""
@@ -237,7 +288,6 @@ class TargetAdapter(Adapter):
             evolution_override: Optional override for schema evolution mode
         """
         evolution = evolution_override or self.config.get("schema_evolution", "ignore")
-        mode = self.config.get("mode", "append")
 
         # Construct full table name
         target_table = self.config.get("table")
@@ -259,7 +309,7 @@ class TargetAdapter(Adapter):
         except Exception:
             # Table does not exist.
             # If mode requires existing table, fail immediately with actionable message
-            if mode in ("append", "upsert"):
+            if self.mode in (WriteMode.APPEND, WriteMode.UPSERT):
                 raise AdapterError(
                     f"Target table '{target_name}' not found in {adapter_type}. "
                     f"Suggestion: Use 'mode: overwrite' for your first run to bootstrap the table structure, "
@@ -309,6 +359,10 @@ class TargetAdapter(Adapter):
 class ParquetTargetAdapter(TargetAdapter):
     """Adapter for Parquet file targets."""
 
+    # COPY ... TO replaces the file, so overwrite is the one mode a file target declares.
+    modes = frozenset({WriteMode.OVERWRITE})
+    default_mode = WriteMode.OVERWRITE
+
     def validate(self):
         if "path" not in self.config:
             raise ValueError("Parquet target requires 'path'")
@@ -333,6 +387,10 @@ class ParquetTargetAdapter(TargetAdapter):
 class CSVTargetAdapter(TargetAdapter):
     """Adapter for CSV file targets."""
 
+    # COPY ... TO replaces the file, so overwrite is the one mode a file target declares.
+    modes = frozenset({WriteMode.OVERWRITE})
+    default_mode = WriteMode.OVERWRITE
+
     def validate(self):
         if "path" not in self.config:
             raise ValueError("CSV target requires 'path'")
@@ -349,6 +407,9 @@ class CSVTargetAdapter(TargetAdapter):
 
 class PostgresTargetAdapter(TargetAdapter):
     """Adapter for Postgres targets."""
+
+    modes = frozenset({WriteMode.OVERWRITE, WriteMode.APPEND, WriteMode.UPSERT})
+    default_mode = WriteMode.APPEND
 
     def validate(self):
         if "conn" not in self.config:
@@ -396,7 +457,6 @@ class PostgresTargetAdapter(TargetAdapter):
             raise ValueError("Postgres target requires 'table' for write operations")
 
         table = self._sanitize_identifier(table_name)
-        mode = self.config.get("mode", "append")
         unique_key = self.config.get("unique_key")
 
         # Prefix table with attachment name if not already qualified
@@ -405,13 +465,13 @@ class PostgresTargetAdapter(TargetAdapter):
         else:
             full_table = f"{name}.{table}"
 
-        if mode == "overwrite":
+        if self.mode is WriteMode.OVERWRITE:
             logger.info(f"Overwriting table: {full_table}")
             return f"""
             DROP TABLE IF EXISTS {full_table};
             CREATE TABLE {full_table} AS SELECT * FROM {relation_sql};
             """
-        elif mode == "upsert":
+        if self.mode is WriteMode.UPSERT:
             if not unique_key:
                 raise ValueError("Upsert requires 'unique_key' configuration")
 
@@ -421,13 +481,17 @@ class PostgresTargetAdapter(TargetAdapter):
             # But standard PG needs `ON CONFLICT`.
             # We'll use DuckDB's `INSERT OR REPLACE INTO` which is the dedicated upsert syntax
             return f"INSERT OR REPLACE INTO {full_table} SELECT * FROM {relation_sql};"
-        else:
+        if self.mode is WriteMode.APPEND:
             logger.info(f"Appending to table: {full_table}")
             return f"INSERT INTO {full_table} SELECT * FROM {relation_sql};"
+        raise AdapterError(f"A postgres target builds no statement for mode '{self.mode.value}'.")
 
 
 class SnowflakeTargetAdapter(TargetAdapter):
     """Adapter for Snowflake targets."""
+
+    modes = frozenset({WriteMode.OVERWRITE, WriteMode.APPEND})
+    default_mode = WriteMode.APPEND
 
     def validate(self):
         if "conn" not in self.config:
@@ -479,7 +543,6 @@ class SnowflakeTargetAdapter(TargetAdapter):
             raise ValueError("Snowflake target requires 'table' for write operations")
 
         table = self._sanitize_identifier(table_name)
-        mode = self.config.get("mode", "append")
 
         # Construct fully qualified table name
         if "." in table:
@@ -487,15 +550,16 @@ class SnowflakeTargetAdapter(TargetAdapter):
         else:
             full_table = f"{name}.{table}"
 
-        if mode == "overwrite":
+        if self.mode is WriteMode.OVERWRITE:
             logger.info(f"Overwriting Snowflake table: {full_table}")
             return f"""
             DROP TABLE IF EXISTS {full_table};
             CREATE TABLE {full_table} AS SELECT * FROM {relation_sql};
             """
-        else:
+        if self.mode is WriteMode.APPEND:
             logger.info(f"Appending to Snowflake table: {full_table}")
             return f"INSERT INTO {full_table} SELECT * FROM {relation_sql};"
+        raise AdapterError(f"A snowflake target builds no statement for mode '{self.mode.value}'.")
 
 
 # ===== REGISTRIES =====

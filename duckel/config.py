@@ -2,10 +2,13 @@
 Configuration loading and validation using Pydantic.
 """
 
+import json
+import re
 from pathlib import Path
 
 import yaml
 
+from .errors import ConfigError
 from .logger import logger
 from .models import PipelineConfig
 from .tokens import resolve_env_tokens, resolve_secret_tokens
@@ -51,6 +54,7 @@ def load_config(path: str) -> dict[str, PipelineConfig]:
         Dictionary mapping pipeline names to validated PipelineConfig objects
 
     Raises:
+        ConfigError: If a pipeline names something its source or target cannot do
         ValueError: If configuration is invalid
         FileNotFoundError: If config file doesn't exist
     """
@@ -66,30 +70,42 @@ def load_config(path: str) -> dict[str, PipelineConfig]:
     if "pipelines" not in cfg:
         raise ValueError("Missing top-level 'pipelines' key in configuration")
 
-    import json
-    import re
+    _refuse_plain_text_passwords(cfg)
 
+    # Resolve environment variables and secrets
+    cfg = resolve_tokens_in_dict(cfg)
+
+    # Validate each pipeline configuration
+    validated_pipelines = {
+        name: _validated_pipeline(name, pipeline_dict)
+        for name, pipeline_dict in cfg["pipelines"].items()
+    }
+
+    logger.info(f"Loaded {len(validated_pipelines)} pipelines")
+    return validated_pipelines
+
+
+def _refuse_plain_text_passwords(cfg: dict) -> None:
+    """Raise ValueError when a configuration spells a password out in place of a token."""
     raw_str = json.dumps(cfg)
     if re.search(r"(?i)\b(?:password|pwd)\s*=\s*(?!__ENV:|SECRET:)", raw_str):
         raise ValueError(
             "Plain-text passwords are not allowed in configurations. Use __ENV:VAR or SECRET:VAR instead."
         )
 
-    # Resolve environment variables and secrets
-    cfg = resolve_tokens_in_dict(cfg)
 
-    # Validate each pipeline configuration
-    validated_pipelines = {}
-    for name, pipeline_dict in cfg["pipelines"].items():
-        try:
-            validated_pipelines[name] = PipelineConfig(**pipeline_dict)
-            logger.debug(f"Validated pipeline: {name}")
-        except Exception as e:
-            logger.error(f"Invalid configuration for pipeline '{name}': {e}")
-            raise ValueError(f"Invalid configuration for pipeline '{name}': {e}") from e
-
-    logger.info(f"Loaded {len(validated_pipelines)} pipelines")
-    return validated_pipelines
+def _validated_pipeline(name: str, pipeline_dict: dict) -> PipelineConfig:
+    """One pipeline as a validated PipelineConfig. A refusal carries the pipeline's name."""
+    try:
+        validated = PipelineConfig(**pipeline_dict)
+        logger.debug(f"Validated pipeline: {name}")
+        return validated
+    except ConfigError as e:
+        logger.error(f"Configuration for pipeline '{name}' is refused: {e}")
+        raise ConfigError(e.category, f"Pipeline '{name}': {e.message}", e.hint) from e
+    except Exception as e:
+        logger.error(f"Invalid configuration for pipeline '{name}': {e}")
+        raise ValueError(f"Invalid configuration for pipeline '{name}': {e}") from e
 
 
 def save_pipeline_config(path: str, name: str, config: PipelineConfig) -> None:

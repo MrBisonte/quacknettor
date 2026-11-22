@@ -63,7 +63,7 @@ class TestTargetConfig:
         config = TargetConfig(type="parquet", path="./output.parquet")
         assert config.type == "parquet"
         assert config.path == "./output.parquet"
-        assert config.mode == "append"  # default
+        assert config.mode == "overwrite"  # the default a file target declares
 
     def test_parquet_target_with_mode(self):
         """Test Parquet target with mode."""

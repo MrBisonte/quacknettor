@@ -7,14 +7,15 @@ Provides type-safe configuration with automatic validation.
 import re
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .adapters import SOURCES, TARGETS
+from .adapters import SOURCES, TARGETS, WriteMode, require_mode
 
 # The validated names are the keys of the registries in `duckel/adapters.py`: one list.
 # A source or target type with no adapter is refused here, when the configuration loads.
 SourceType = Literal[tuple(SOURCES)]
 TargetType = Literal[tuple(TARGETS)]
+WriteModeName = Literal[tuple(mode.value for mode in WriteMode)]
 
 
 class SourceConfig(BaseModel):
@@ -66,7 +67,8 @@ class TargetConfig(BaseModel):
     conn: Optional[str] = None
     name: Optional[str] = None
     table: Optional[str] = None
-    mode: Literal["overwrite", "append", "upsert"] = "append"
+    # None means the configuration names no mode: the target then gets the default it declares.
+    mode: Optional[WriteModeName] = None
     compression: Optional[str] = "zstd"
 
     # Evolution and upsert options
@@ -105,6 +107,19 @@ class TargetConfig(BaseModel):
                 f"Invalid SQL identifier: {v}. Only alphanumeric, underscore, dot, and comma allowed."
             )
         return v
+
+    @model_validator(mode="after")
+    def settle_the_mode(self) -> "TargetConfig":
+        """
+        Give a target with no mode the default it declares, and refuse a mode it does not declare.
+
+        Raises:
+            ConfigError: If the target does not declare the mode
+        """
+        adapter = TARGETS[self.type]
+        named = self.mode or adapter.default_mode.value
+        self.mode = require_mode(self.type, adapter.modes, named).value
+        return self
 
 
 class PipelineOptions(BaseModel):
