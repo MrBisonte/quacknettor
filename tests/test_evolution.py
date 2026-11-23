@@ -30,7 +30,10 @@ def test_sync_schema_add_column():
 
     # Verify ALTER TABLE called for new_col
     # Note: The logic in sync_schema might make other calls (like ATTACH) but sync_schema calls DESCRIBE then ALTER
-    con.execute.assert_any_call('ALTER TABLE tgt_table ADD COLUMN "new_col" VARCHAR')
+    # The check names the table the write names: the attachment alias, then the table.
+    con.execute.assert_any_call(
+        'ALTER TABLE pg_target_attachment.tgt_table ADD COLUMN "new_col" VARCHAR'
+    )
 
 
 def test_sync_schema_fail_mode():
@@ -97,4 +100,4 @@ def test_sync_schema_override():
     adapter.sync_schema(con, "src", evolution_override="evolve")
 
     # Should have called ALTER TABLE
-    con.execute.assert_any_call('ALTER TABLE tgt ADD COLUMN "new" INT')
+    con.execute.assert_any_call('ALTER TABLE pg_target_attachment.tgt ADD COLUMN "new" INT')

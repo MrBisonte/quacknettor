@@ -9,7 +9,14 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .adapters import SOURCES, TARGETS, WriteMode, require_mode
+from .adapters import (
+    DEFAULT_SCHEMA_EVOLUTION,
+    SOURCES,
+    TARGETS,
+    SchemaEvolution,
+    WriteMode,
+    require_mode,
+)
 from .settings import DEFAULT_COMPRESSION, DEFAULT_MEMORY_LIMIT, DEFAULT_THREADS
 
 # The validated names are the keys of the registries in `duckel/adapters.py`: one list.
@@ -17,6 +24,7 @@ from .settings import DEFAULT_COMPRESSION, DEFAULT_MEMORY_LIMIT, DEFAULT_THREADS
 SourceType = Literal[tuple(SOURCES)]
 TargetType = Literal[tuple(TARGETS)]
 WriteModeName = Literal[tuple(mode.value for mode in WriteMode)]
+SchemaEvolutionName = Literal[tuple(setting.value for setting in SchemaEvolution)]
 
 
 class SourceConfig(BaseModel):
@@ -74,7 +82,7 @@ class TargetConfig(BaseModel):
 
     # Evolution and upsert options
     unique_key: Optional[str] = None
-    schema_evolution: Literal["ignore", "fail", "evolve"] = "ignore"
+    schema_evolution: SchemaEvolutionName = DEFAULT_SCHEMA_EVOLUTION.value
 
     @field_validator("path")
     @classmethod
@@ -135,7 +143,8 @@ class PipelineOptions(BaseModel):
 
     # New options for incremental and evolution
     full_refresh: bool = False
-    schema_evolution: Literal["ignore", "fail", "evolve"] = "ignore"
+    # None leaves the setting of the target in force. A value wins over it for one run.
+    schema_evolution: Optional[SchemaEvolutionName] = None
     ignore_watermark: bool = False
 
 

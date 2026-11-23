@@ -38,13 +38,14 @@
 ## Context
 
 arch-standards restates the five SOLID principles as 13 rules for code that moves data. This
-project is the first to adopt them. The rules were read against `d382125`, and seven breaches
+project is the first to adopt them. The rules were read against `d382125`, and eight breaches
 were found in the `duckel` package.
 
 | Found at `d382125` | Rule | Changed to |
 |---|---|---|
 | `mode: upsert` validated for every target. Snowflake built a plain INSERT. Parquet and CSV replaced the file | 6 | Each target declares its modes. Any other mode is refused when the configuration loads |
 | `mode: append` on a Parquet or CSV target replaced the file, and `append` was the default mode | 6 | A file target declares `overwrite` only, and gets it when no mode is set |
+| `schema_evolution: ignore` stopped a database run and was passed over on Parquet. The setting of a target was never read | 6 | One check on every target, see decision 7 |
 | The source type `duckdb` validated and had no adapter | 4, 6 | The validated list is the registry |
 | Three inserts aligned their values by position | 9 | Every statement names its columns |
 | The thread and memory defaults stood in three places, the compression default in two | 1 | One home, `duckel/settings.py` |
@@ -115,14 +116,26 @@ python "$ARCH_STANDARDS/scripts/design_check.py" .
    cannot read the size of a written file, the write returns no byte count and logs a warning.
    The rows are committed by then, so the run goes on.
 
-7. Where each rule is checked.
+7. `schema_evolution` means the same on every target. The check compares the columns of the
+   source with the columns the target holds, by name and without case. `ignore` is the
+   default. Decided on 2026-11-23.
+
+| Setting | A write that keeps the rows of the target: append, upsert | A write that recreates the target: overwrite, and every file |
+|---|---|---|
+| `ignore` | A warning names the columns. A source column the target lacks is not loaded. A target column the source lacks is filled with NULL | A warning names the columns. The target takes the columns of the source |
+| `fail` | The run stops before any write | The run stops before any write |
+| `evolve` | The new columns of the source are added to the target | The target takes the columns of the source |
+
+The setting of the target applies. An option given for one run wins over it.
+
+8. Where each rule is checked.
 
 | Rule | Check | Where |
 |---|---|---|
 | 1 | The scan | `.design.yaml`, `settings` |
 | 2 | The scan | `.design.yaml`, `semantic` |
 | 4 | The validated names equal the keys of the registry | `tests/test_registry.py` |
-| 6 | Every target against every mode runs, or is refused when it loads | `tests/test_modes.py` |
+| 6 | Every target against every mode runs, or is refused when it loads. Every target against every `schema_evolution` setting | `tests/test_modes.py`, `tests/test_schema_evolution.py` |
 | 9 | The scan, and each statement names its columns | `tests/test_write.py` |
 | 10 | The scan, and the runner driven through a connection and a clock | `tests/test_runner_seams.py` |
 | 13 | A write returns its counts, and a second read finds the same | `tests/test_write.py` |
@@ -141,8 +154,12 @@ the table run in the remote check.
   the adapter's own statement on a DuckDB attachment.
 - Negative: a configuration that sets `mode: append` on a Parquet or CSV target no longer
   loads. It has to say `overwrite`, which is what the write did.
+- Negative: a database configuration that sets no `schema_evolution` no longer stops when the
+  source gains a column. The run warns and loads the columns the target holds.
+- Negative: `fail` now stops a Parquet or CSV run when the file on disk holds other columns
+  than the source. It was passed over before.
 - Negative: an insert names its columns, so the engine no longer refuses a target that holds a
-  column the source lacks. That column is filled with NULL.
+  column the source lacks. The schema check warns under `ignore` and stops under `fail`.
 - Negative: three signatures change. `TargetAdapter.build_write_sql` and
   `build_target_write_sql` take the columns, and `PipelineRunner` takes a clock.
 - Negative: a target adapter written outside this repository has to declare `modes`,

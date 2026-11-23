@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any, ClassVar, Optional
 
 from duckdb import DuckDBPyConnection
+from duckdb import Error as DuckDBError
 
 from .errors import ConfigError, ConfigErrorCategory
 from .logger import logger
@@ -56,6 +57,18 @@ def require_mode(target: str, modes: frozenset, mode: str) -> WriteMode:
             f"Use one of the modes a {target} target supports: {supported}.",
         )
     return WriteMode(mode)
+
+
+class SchemaEvolution(str, Enum):
+    """What a run does when the source and the target hold different columns."""
+
+    IGNORE = "ignore"
+    FAIL = "fail"
+    EVOLVE = "evolve"
+
+
+# The setting of a target whose configuration names none. Its one home.
+DEFAULT_SCHEMA_EVOLUTION = SchemaEvolution.IGNORE
 
 
 class Counted(str, Enum):
@@ -131,6 +144,21 @@ def describe_columns(con: DuckDBPyConnection, relation_sql: str) -> dict[str, st
     """
     described = con.execute(f"DESCRIBE SELECT * FROM {relation_sql} LIMIT 0").fetchall()
     return {row[0]: row[1] for row in described}
+
+
+def _named_in(name: str, columns: dict[str, str]) -> bool:
+    """True when a column of that name is among the columns, compared without case."""
+    return name.lower() in {held.lower() for held in columns}
+
+
+def _difference(new: list, gone: list) -> str:
+    """The columns a source and a target do not share, as one clause."""
+    clauses = []
+    if new:
+        clauses.append(f"the source has columns {new} that are missing in the target")
+    if gone:
+        clauses.append(f"the target has columns {gone} that are missing in the source")
+    return " and ".join(clauses)
 
 
 def file_size_sql(path: str) -> str:
@@ -422,86 +450,108 @@ class TargetAdapter(Adapter):
             raise
         return WriteReport(rows=rows, bytes=self.bytes_written(con))
 
-    def sync_schema(self, con, relation_sql: str, evolution_override: Optional[str] = None):
-        """
-        Synchronize target schema with source schema.
+    @abstractmethod
+    def relation(self) -> str:
+        """An expression a FROM takes that reads the target back."""
+        pass
 
-        This method now performs proactive validation:
-        1. Checks if target table exists (required for append/upsert)
-        2. Compares schemas and provides actionable error messages
+    def keeps_rows(self) -> bool:
+        """True when the write keeps the rows the target holds. An overwrite recreates it."""
+        return self.mode is not WriteMode.OVERWRITE
+
+    def existing_columns(self, con: DuckDBPyConnection) -> Optional[dict[str, str]]:
+        """The columns the target holds and their types, or None when the engine finds no target."""
+        try:
+            return describe_columns(con, self.relation())
+        except DuckDBError:
+            return None
+
+    def sync_schema(
+        self, con: DuckDBPyConnection, relation_sql: str, evolution_override: Optional[str] = None
+    ) -> list[str]:
+        """
+        Compare the source with the target, apply `schema_evolution`, return the columns to fill.
+
+        A write that recreates the target fills every source column. A write that keeps the rows
+        of the target fills the source columns the target holds. Names are compared without
+        case, as the engine binds them.
 
         Args:
             con: DuckDB connection
             relation_sql: Source relation SQL
-            evolution_override: Optional override for schema evolution mode
+            evolution_override: The setting for this run, in place of the target's own
+
+        Returns:
+            The columns the write names, in the order of the source
+
+        Raises:
+            AdapterError: If the setting is `fail` and the columns differ, if an append or an
+                upsert finds no target, or if a column cannot be added
         """
-        evolution = evolution_override or self.config.get("schema_evolution", "ignore")
+        named = evolution_override or self.config.get("schema_evolution")
+        evolution = SchemaEvolution(named or DEFAULT_SCHEMA_EVOLUTION.value)
+        held = self.existing_columns(con)
+        source = describe_columns(con, relation_sql)
+        if held is None:
+            self._refuse_to_keep_the_rows_of_no_target()
+            return list(source)
 
-        # Construct full table name
-        target_table = self.config.get("table")
-        if not target_table:
-            # Table is missing. In overwrite mode, this is acceptable during validation/attachment.
-            # However, building write SQL will eventually require it.
+        new = {name: kind for name, kind in source.items() if not _named_in(name, held)}
+        gone = [name for name in held if not _named_in(name, source)]
+        if new or gone:
+            self._settle(con, evolution, new, gone)
+        if self.keeps_rows() and evolution is not SchemaEvolution.EVOLVE:
+            return [name for name in source if name not in new]
+        return list(source)
+
+    def _refuse_to_keep_the_rows_of_no_target(self) -> None:
+        """Raise AdapterError when an append or an upsert finds no target to keep the rows of."""
+        if self.keeps_rows():
+            raise AdapterError(
+                f"Target table '{self.relation()}' not found in {self.config.get('type')}. "
+                "Suggestion: Use 'mode: overwrite' for your first run to bootstrap the table "
+                "structure, or create the table manually in the target database."
+            )
+
+    def _settle(
+        self, con: DuckDBPyConnection, evolution: SchemaEvolution, new: dict[str, str], gone: list
+    ) -> None:
+        """Apply the setting to a source and a target that hold different columns."""
+        mismatch = f"Schema mismatch on '{self.relation()}': {_difference(list(new), gone)}."
+        if evolution is SchemaEvolution.FAIL:
+            raise AdapterError(
+                f"{mismatch} Pipeline aborted because schema_evolution is set to 'fail'."
+            )
+        if evolution is SchemaEvolution.EVOLVE:
+            if self.keeps_rows():
+                self._add_columns(con, new)
+            logger.warning(f"{mismatch} schema_evolution is 'evolve'. {self._outcome(evolution)}")
             return
-
-        target_name = target_table
-        adapter_type = self.config.get("type", "database")
-        if hasattr(self, "config") and "name" in self.config:
-            target_name = f"{self.config['name']}.{target_name}"
-
-        # Step 1: Check if target table exists
-        tgt_cols = {}
-        try:
-            tgt_desc = con.execute(f"DESCRIBE {target_name}").fetchall()
-            tgt_cols = {r[0]: r[1] for r in tgt_desc}
-        except Exception:
-            # Table does not exist.
-            # If mode requires existing table, fail immediately with actionable message
-            if self.mode in (WriteMode.APPEND, WriteMode.UPSERT):
-                raise AdapterError(
-                    f"Target table '{target_name}' not found in {adapter_type}. "
-                    f"Suggestion: Use 'mode: overwrite' for your first run to bootstrap the table structure, "
-                    f"or create the table manually in the target database."
-                )
-            # For overwrite mode, table will be created - no error needed
+        if evolution is SchemaEvolution.IGNORE:
+            logger.warning(f"{mismatch} schema_evolution is 'ignore'. {self._outcome(evolution)}")
             return
+        raise AdapterError(f"schema_evolution '{evolution.value}' is not handled by a target.")
 
-        # Step 2: Compare schemas (always do this if table exists)
-        try:
-            src_desc = con.execute(f"DESCRIBE SELECT * FROM {relation_sql} LIMIT 0").fetchall()
-            src_cols = {r[0]: r[1] for r in src_desc}
-        except Exception as e:
-            logger.warning(f"Could not describe source for schema comparison: {e}")
-            return
+    def _outcome(self, evolution: SchemaEvolution) -> str:
+        """What the run does next with the columns the two sides do not share."""
+        if not self.keeps_rows():
+            return "The run continues: the target is replaced and takes the columns of the source."
+        absent = "A target column the source lacks is filled with NULL."
+        if evolution is SchemaEvolution.EVOLVE:
+            return f"The run continues: a source column the target lacks is added. {absent}"
+        return f"The run continues: a source column the target lacks is not loaded. {absent}"
 
-        # Find columns in source that are missing in target
-        missing_cols = {k: v for k, v in src_cols.items() if k not in tgt_cols}
-
-        if missing_cols:
-            missing_list = list(missing_cols.keys())
-
-            if evolution == "fail":
+    def _add_columns(self, con: DuckDBPyConnection, new: dict[str, str]) -> None:
+        """Add the columns the source has gained to a target that keeps its rows."""
+        target = self.relation()
+        for col, dtype in new.items():
+            try:
+                con.execute(f"ALTER TABLE {target} ADD COLUMN {quote_identifier(col)} {dtype}")
+            except Exception as e:
+                logger.error(f"Failed to add column {col}: {e}")
                 raise AdapterError(
-                    f"Schema mismatch: Source has columns {missing_list} that are missing in target '{target_name}'. "
-                    f"Pipeline aborted because schema_evolution is set to 'fail'."
-                )
-            elif evolution == "evolve":
-                logger.info(f"Evolving schema for {target_name}. Adding columns: {missing_list}")
-                for col, dtype in missing_cols.items():
-                    try:
-                        con.execute(f'ALTER TABLE {target_name} ADD COLUMN "{col}" {dtype}')
-                    except Exception as e:
-                        logger.error(f"Failed to add column {col}: {e}")
-                        raise AdapterError(
-                            f"Schema evolution failed while adding column '{col}': {e}"
-                        ) from e
-            else:
-                # evolution == "ignore" - but we still warn with actionable message
-                raise AdapterError(
-                    f"Schema mismatch: Source has columns {missing_list} that are missing in target '{target_name}'. "
-                    f"Suggestion: Set 'schema_evolution: evolve' to add these columns automatically, "
-                    f"or use 'mode: overwrite' to recreate the table with the new schema."
-                )
+                    f"Schema evolution failed while adding column '{col}': {e}"
+                ) from e
 
 
 class FileTargetAdapter(TargetAdapter):
@@ -515,9 +565,16 @@ class FileTargetAdapter(TargetAdapter):
     default_mode = WriteMode.OVERWRITE
     counts = frozenset({Counted.ROWS, Counted.BYTES})
 
+    # The DuckDB function that reads this file format back, declared by each format.
+    reader: ClassVar[str]
+
     def attach(self, con):
         """No attachment needed for a file."""
         pass
+
+    def relation(self) -> str:
+        """The file, read back by the function of its format."""
+        return f"{self.reader}('{self.config['path']}')"
 
     def bytes_written(self, con: DuckDBPyConnection) -> Optional[int]:
         """
@@ -560,6 +617,10 @@ class DatabaseTargetAdapter(TargetAdapter):
         """The name the database is attached under: the configured one, or this target's default."""
         return self._sanitize_identifier(self.config.get("name") or self.default_alias)
 
+    def relation(self) -> str:
+        """The target table, as the write names it."""
+        return self.full_table()
+
     def full_table(self) -> str:
         """The target table, qualified by the attachment alias."""
         table_name = self.config.get("table")
@@ -571,13 +632,11 @@ class DatabaseTargetAdapter(TargetAdapter):
 class ParquetTargetAdapter(FileTargetAdapter):
     """Adapter for Parquet file targets."""
 
+    reader = "read_parquet"
+
     def validate(self):
         if "path" not in self.config:
             raise ValueError("Parquet target requires 'path'")
-
-    def sync_schema(self, con, relation_sql: str, evolution_override: Optional[str] = None):
-        """Schema evolution not supported for Parquet files (yet)."""
-        pass
 
     def build_write_sql(self, relation_sql: str, columns: Sequence[str]) -> str:
         path = self.config["path"]
@@ -590,6 +649,8 @@ class ParquetTargetAdapter(FileTargetAdapter):
 
 class CSVTargetAdapter(FileTargetAdapter):
     """Adapter for CSV file targets."""
+
+    reader = "read_csv_auto"
 
     def validate(self):
         if "path" not in self.config:

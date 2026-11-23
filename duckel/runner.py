@@ -17,7 +17,6 @@ from .adapters import (
     WriteReport,
     create_source_adapter,
     create_target_adapter,
-    describe_columns,
 )
 from .clock import Clock, system_clock
 from .engine import DuckDBEngine
@@ -171,13 +170,11 @@ class PipelineRunner:
         base_relation = source_adapter.get_relation_sql()
         logger.debug(f"Base relation: {base_relation}")
 
-        # 1. Sync Schema (Evolve)
+        # 1. Sync Schema (Evolve). It returns the columns the write names.
         logger.info("Checking schema synchronization...")
-        target_adapter.sync_schema(
+        columns = target_adapter.sync_schema(
             con, base_relation, evolution_override=self.options.schema_evolution
         )
-        # The columns the write names, read after the target schema is settled.
-        columns = list(describe_columns(con, base_relation))
 
         # 2. Get Watermark & Apply Incremental Filter
         relation_sql = self._incremental_relation(source_adapter, base_relation)
