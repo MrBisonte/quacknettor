@@ -9,6 +9,7 @@ from typing import Optional
 import duckdb
 
 from .logger import logger
+from .settings import DEFAULT_MEMORY_LIMIT, DEFAULT_THREADS
 
 
 class DuckDBEngineError(Exception):
@@ -26,7 +27,12 @@ class DuckDBEngine:
             result = con.execute("SELECT * FROM table").fetchdf()
     """
 
-    def __init__(self, db_path: str = ":memory:", threads: int = 4, memory_limit: str = "2GB"):
+    def __init__(
+        self,
+        db_path: str = ":memory:",
+        threads: int = DEFAULT_THREADS,
+        memory_limit: str = DEFAULT_MEMORY_LIMIT,
+    ):
         """
         Initialize DuckDB engine configuration.
 
@@ -130,7 +136,11 @@ class DuckDBEngine:
 
 
 @contextmanager
-def make_con(db_path: str = ":memory:", threads: int = 4, memory_limit: str = "2GB"):
+def make_con(
+    db_path: str = ":memory:",
+    threads: int = DEFAULT_THREADS,
+    memory_limit: str = DEFAULT_MEMORY_LIMIT,
+):
     """
     Legacy context manager for backward compatibility.
 
@@ -146,7 +156,7 @@ def resolve_env_tokens(s: str) -> str:
     """
     Legacy function for backward compatibility.
 
-    Moved to config.py - import from there instead.
+    It lives in tokens.py, and config.py still exports it - import from there instead.
     """
     from .config import resolve_env_tokens as resolve
 

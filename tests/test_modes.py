@@ -12,22 +12,19 @@ from duckel.adapters import TARGETS, WriteMode, create_target_adapter
 from duckel.config import load_config
 from duckel.errors import ConfigError, ConfigErrorCategory
 from duckel.models import PipelineConfig, TargetConfig
+from tests.vectors import BATCH, COLUMNS, DATABASE_TARGETS, FILE_READERS, FILE_TARGETS, HELD, values
 
 PAIRS = [(target, mode) for target in sorted(TARGETS) for mode in WriteMode]
 
-# What a target holds, the batch a run brings, and what each mode leaves behind.
-HELD = [(1, "a"), (2, "z")]
-BATCH = [(1, "b"), (3, "c")]
+# What each mode leaves behind, when a target holds HELD and a run brings BATCH.
 LEFT_BY = {
     WriteMode.OVERWRITE: [(1, "b"), (3, "c")],
     WriteMode.APPEND: [(1, "a"), (1, "b"), (2, "z"), (3, "c")],
     WriteMode.UPSERT: [(1, "b"), (2, "z"), (3, "c")],
 }
-# The targets that write a local file, and the function that reads one back.
-FILE_READERS = {"csv": "read_csv_auto", "parquet": "read_parquet"}
 FILE_PAIRS = [
     pytest.param(target, mode, id=f"{target}-{mode.value}")
-    for target in sorted(FILE_READERS)
+    for target in FILE_TARGETS
     for mode in sorted(TARGETS[target].modes)
 ]
 
@@ -39,7 +36,7 @@ STATEMENT_OF = {
 }
 DATABASE_PAIRS = [
     pytest.param(target, mode, id=f"{target}-{mode.value}")
-    for target in sorted(set(TARGETS) - set(FILE_READERS))
+    for target in DATABASE_TARGETS
     for mode in sorted(TARGETS[target].modes)
 ]
 
@@ -86,7 +83,7 @@ def test_a_target_with_no_mode_gets_the_default_it_declares(target):
     assert TARGETS[target](config).mode is TARGETS[target].default_mode
 
 
-@pytest.mark.parametrize("target", sorted(FILE_READERS))
+@pytest.mark.parametrize("target", FILE_TARGETS)
 def test_append_on_a_file_target_is_refused(target):
     """COPY ... TO replaces the file, so a file target cannot keep the rows it holds."""
     with pytest.raises(ConfigError, match="append") as refused:
@@ -99,7 +96,7 @@ def test_each_mode_runs_or_is_refused(target, mode):
     config = target_config(target, mode)
     if mode in TARGETS[target].modes:
         loaded = TargetConfig(**config)
-        assert TARGETS[target](loaded.model_dump()).build_write_sql("source")
+        assert TARGETS[target](loaded.model_dump()).build_write_sql("source", COLUMNS)
     else:
         with pytest.raises(ConfigError, match=mode.value) as refused:
             TargetConfig(**config)
@@ -108,18 +105,14 @@ def test_each_mode_runs_or_is_refused(target, mode):
         assert all(m.value in hint for m in TARGETS[target].modes), "the hint names the modes"
 
 
-def values(rows: list) -> str:
-    """Rows as a relation with the columns id and v."""
-    return f"(VALUES {', '.join(str(row) for row in rows)}) AS rows(id, v)"
-
-
 @pytest.mark.parametrize("target,mode", FILE_PAIRS)
 def test_a_file_target_leaves_what_its_mode_says(con, tmp_path, target, mode):
     path = (tmp_path / f"t.{target}").as_posix()
     held = {"type": target, "path": path, "mode": WriteMode.OVERWRITE.value}
-    con.execute(create_target_adapter(held).build_write_sql(values(HELD)))
+    con.execute(create_target_adapter(held).build_write_sql(values(HELD), COLUMNS))
 
-    con.execute(create_target_adapter({**held, "mode": mode.value}).build_write_sql(values(BATCH)))
+    batch = create_target_adapter({**held, "mode": mode.value})
+    con.execute(batch.build_write_sql(values(BATCH), COLUMNS))
 
     left = con.execute(f"SELECT id, v FROM {FILE_READERS[target]}('{path}') ORDER BY id, v")
     assert left.fetchall() == LEFT_BY[mode]
@@ -128,7 +121,7 @@ def test_a_file_target_leaves_what_its_mode_says(con, tmp_path, target, mode):
 @pytest.mark.parametrize("target,mode", DATABASE_PAIRS)
 def test_a_database_target_builds_the_statement_of_its_mode(target, mode):
     loaded = TargetConfig(**target_config(target, mode))
-    sql = TARGETS[target](loaded.model_dump()).build_write_sql("source")
+    sql = TARGETS[target](loaded.model_dump()).build_write_sql("source", COLUMNS)
     assert STATEMENT_OF[mode] in sql
     assert [text for text in STATEMENT_OF.values() if text in sql] == [STATEMENT_OF[mode]]
 

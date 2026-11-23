@@ -125,7 +125,7 @@ ui/main.py         Streamlit application
 configs/           Pipeline definitions and environment templates
 scripts/           Utilities (test-data generation, local Postgres, benchmark)
 tests/             Unit tests + a Docker/Snowflake-gated integration matrix
-docs/              Naming conventions and notes
+docs/              Naming conventions, notes and decision records (docs/adr)
 ops/               Operations runbook
 ```
 
@@ -153,6 +153,22 @@ pytest tests/integration -m "integration and not snowflake" -v
 | **Snowflake** | ✓ | ✓ | ✓ | ✓ |
 
 CI runs Ruff, Black, the unit tests, and a pip-audit security scan on every push and pull request.
+
+## Design rules
+
+Design follows `arch-standards/code/design/SPEC.md`. The open sets are the sources and the
+targets, and their registries are `SOURCES` and `TARGETS` in `duckel/adapters.py`.
+
+The design scan is `scripts/design_check.py` of arch-standards. It is not part of this repository
+and CI does not run it. It reads `.design.yaml` at the root of this repository, and runs from a
+checkout of arch-standards, whose path is `ARCH_STANDARDS`:
+
+```bash
+python "$ARCH_STANDARDS/scripts/design_check.py" .   # exits 0 when the package conforms
+```
+
+The decision, the scan's declaration and what does not conform yet are recorded in
+[docs/adr/ADR-0001-design-rules.md](docs/adr/ADR-0001-design-rules.md).
 
 ## Roadmap and limitations
 

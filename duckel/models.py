@@ -10,6 +10,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .adapters import SOURCES, TARGETS, WriteMode, require_mode
+from .settings import DEFAULT_COMPRESSION, DEFAULT_MEMORY_LIMIT, DEFAULT_THREADS
 
 # The validated names are the keys of the registries in `duckel/adapters.py`: one list.
 # A source or target type with no adapter is refused here, when the configuration loads.
@@ -69,7 +70,7 @@ class TargetConfig(BaseModel):
     table: Optional[str] = None
     # None means the configuration names no mode: the target then gets the default it declares.
     mode: Optional[WriteModeName] = None
-    compression: Optional[str] = "zstd"
+    compression: Optional[str] = DEFAULT_COMPRESSION
 
     # Evolution and upsert options
     unique_key: Optional[str] = None
@@ -125,8 +126,8 @@ class TargetConfig(BaseModel):
 class PipelineOptions(BaseModel):
     """Runtime options for pipeline execution."""
 
-    threads: int = Field(default=4, ge=1, le=64)
-    memory_limit: str = Field(default="2GB", pattern=r"^\d+[KMGT]B$")
+    threads: int = Field(default=DEFAULT_THREADS, ge=1, le=64)
+    memory_limit: str = Field(default=DEFAULT_MEMORY_LIMIT, pattern=r"^\d+[KMGT]B$")
     compute_counts: bool = True
     sample_data: bool = True
     sample_rows: int = Field(default=50, ge=1, le=100000)

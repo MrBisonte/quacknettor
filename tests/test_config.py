@@ -79,7 +79,7 @@ class TestTargetConfig:
 
         # But it SHOULD raise when trying to write
         with pytest.raises(ValueError, match="requires 'table'"):
-            adapter.build_write_sql("source_data")
+            adapter.build_write_sql("source_data", ("id",))
 
     def test_invalid_mode(self):
         """Test that invalid mode is rejected."""
