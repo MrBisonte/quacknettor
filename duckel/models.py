@@ -5,7 +5,7 @@ Provides type-safe configuration with automatic validation.
 """
 
 import re
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -31,15 +31,15 @@ class SourceConfig(BaseModel):
     """Configuration for data source."""
 
     type: SourceType
-    path: Optional[str] = None
-    conn: Optional[str] = None
-    name: Optional[str] = None
-    object: Optional[str] = None
-    query: Optional[str] = None
+    path: str | None = None
+    conn: str | None = None
+    name: str | None = None
+    object: str | None = None
+    query: str | None = None
 
     @field_validator("path")
     @classmethod
-    def validate_path_for_file_sources(cls, v: Optional[str], info) -> Optional[str]:
+    def validate_path_for_file_sources(cls, v: str | None, info) -> str | None:
         """Validate that file-based sources have a path."""
         if info.data.get("type") in ["parquet", "csv"] and not v:
             raise ValueError(f"path required for {info.data.get('type')} source")
@@ -47,7 +47,7 @@ class SourceConfig(BaseModel):
 
     @field_validator("conn")
     @classmethod
-    def validate_conn_for_db_sources(cls, v: Optional[str], info) -> Optional[str]:
+    def validate_conn_for_db_sources(cls, v: str | None, info) -> str | None:
         """Validate that database sources have a connection string."""
         if info.data.get("type") in ["postgres", "snowflake"] and not v:
             raise ValueError(f"conn required for {info.data.get('type')} source")
@@ -55,7 +55,7 @@ class SourceConfig(BaseModel):
 
     @field_validator("object", "name")
     @classmethod
-    def sanitize_identifier(cls, v: Optional[str]) -> Optional[str]:
+    def sanitize_identifier(cls, v: str | None) -> str | None:
         """Sanitize SQL identifiers to prevent injection."""
         if v and not re.match(r"^[a-zA-Z0-9_\.]+$", v):
             raise ValueError(
@@ -64,29 +64,29 @@ class SourceConfig(BaseModel):
         return v
 
     # Incremental loading options
-    incremental_key: Optional[str] = None
-    lookback_window: Optional[str] = None
+    incremental_key: str | None = None
+    lookback_window: str | None = None
 
 
 class TargetConfig(BaseModel):
     """Configuration for data target."""
 
     type: TargetType
-    path: Optional[str] = None
-    conn: Optional[str] = None
-    name: Optional[str] = None
-    table: Optional[str] = None
+    path: str | None = None
+    conn: str | None = None
+    name: str | None = None
+    table: str | None = None
     # None means the configuration names no mode: the target then gets the default it declares.
-    mode: Optional[WriteModeName] = None
-    compression: Optional[str] = DEFAULT_COMPRESSION
+    mode: WriteModeName | None = None
+    compression: str | None = DEFAULT_COMPRESSION
 
     # Evolution and upsert options
-    unique_key: Optional[str] = None
+    unique_key: str | None = None
     schema_evolution: SchemaEvolutionName = DEFAULT_SCHEMA_EVOLUTION.value
 
     @field_validator("path")
     @classmethod
-    def validate_path_for_file_targets(cls, v: Optional[str], info) -> Optional[str]:
+    def validate_path_for_file_targets(cls, v: str | None, info) -> str | None:
         """Validate that file-based targets have a path."""
         if info.data.get("type") in ["parquet", "csv"] and not v:
             raise ValueError(f"path required for {info.data.get('type')} target")
@@ -94,7 +94,7 @@ class TargetConfig(BaseModel):
 
     @field_validator("conn")
     @classmethod
-    def validate_conn_for_db_targets(cls, v: Optional[str], info) -> Optional[str]:
+    def validate_conn_for_db_targets(cls, v: str | None, info) -> str | None:
         """Validate that database targets have a connection string."""
         if info.data.get("type") in ["postgres", "snowflake"] and not v:
             raise ValueError(f"conn required for {info.data.get('type')} target")
@@ -102,14 +102,14 @@ class TargetConfig(BaseModel):
 
     @field_validator("table")
     @classmethod
-    def validate_table_for_db_targets(cls, v: Optional[str], info) -> Optional[str]:
+    def validate_table_for_db_targets(cls, v: str | None, info) -> str | None:
         """Validate that database targets have a table name if not in testing mode."""
         # We allow table to be None initially for connection testing in the UI
         return v
 
     @field_validator("table", "name", "unique_key")
     @classmethod
-    def sanitize_identifier(cls, v: Optional[str]) -> Optional[str]:
+    def sanitize_identifier(cls, v: str | None) -> str | None:
         """Sanitize SQL identifiers to prevent injection."""
         if v and not re.match(r"^[a-zA-Z0-9_\.,]+$", v):  # Added comma support for composite keys
             raise ValueError(
@@ -144,7 +144,7 @@ class PipelineOptions(BaseModel):
     # New options for incremental and evolution
     full_refresh: bool = False
     # None leaves the setting of the target in force. A value wins over it for one run.
-    schema_evolution: Optional[SchemaEvolutionName] = None
+    schema_evolution: SchemaEvolutionName | None = None
     ignore_watermark: bool = False
 
 
@@ -155,7 +155,7 @@ class PipelineConfig(BaseModel):
     target: TargetConfig
     options: dict[str, Any] = Field(default_factory=dict)
 
-    def get_options(self, overrides: Optional[dict[str, Any]] = None) -> PipelineOptions:
+    def get_options(self, overrides: dict[str, Any] | None = None) -> PipelineOptions:
         """
         Get pipeline options with overrides applied.
 

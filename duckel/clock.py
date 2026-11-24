@@ -6,7 +6,7 @@ A test passes a function that returns a fixed time, so nothing sleeps and nothin
 """
 
 import time
-from typing import Callable
+from collections.abc import Callable
 
 # Seconds since the epoch, on each call.
 Clock = Callable[[], float]

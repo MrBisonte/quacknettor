@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 from duckdb import DuckDBPyConnection
 from duckdb import Error as DuckDBError
@@ -90,7 +90,7 @@ class WriteReport:
     """
 
     rows: int
-    bytes: Optional[int]
+    bytes: int | None
 
 
 def quote_identifier(name: str) -> str:
@@ -113,7 +113,7 @@ def column_list(columns: Sequence[str]) -> str:
     return ", ".join(quote_identifier(column) for column in columns)
 
 
-def row_count(counted: Optional[tuple]) -> int:
+def row_count(counted: tuple | None) -> int:
     """
     The row count a write statement returns.
 
@@ -249,7 +249,7 @@ class SourceAdapter(Adapter):
         """Get SQL expression to reference this source."""
         pass
 
-    def get_incremental_sql(self, relation_sql: str, watermark_value: Optional[Any] = None) -> str:
+    def get_incremental_sql(self, relation_sql: str, watermark_value: Any | None = None) -> str:
         """
         Get SQL expression with incremental filtering applied.
 
@@ -420,7 +420,7 @@ class TargetAdapter(Adapter):
         pass
 
     @abstractmethod
-    def bytes_written(self, con: DuckDBPyConnection) -> Optional[int]:
+    def bytes_written(self, con: DuckDBPyConnection) -> int | None:
         """Bytes the last write moved, or None when this target has no count to give."""
         pass
 
@@ -459,7 +459,7 @@ class TargetAdapter(Adapter):
         """True when the write keeps the rows the target holds. An overwrite recreates it."""
         return self.mode is not WriteMode.OVERWRITE
 
-    def existing_columns(self, con: DuckDBPyConnection) -> Optional[dict[str, str]]:
+    def existing_columns(self, con: DuckDBPyConnection) -> dict[str, str] | None:
         """The columns the target holds and their types, or None when the engine finds no target."""
         try:
             return describe_columns(con, self.relation())
@@ -467,7 +467,7 @@ class TargetAdapter(Adapter):
             return None
 
     def sync_schema(
-        self, con: DuckDBPyConnection, relation_sql: str, evolution_override: Optional[str] = None
+        self, con: DuckDBPyConnection, relation_sql: str, evolution_override: str | None = None
     ) -> list[str]:
         """
         Compare the source with the target, apply `schema_evolution`, return the columns to fill.
@@ -576,7 +576,7 @@ class FileTargetAdapter(TargetAdapter):
         """The file, read back by the function of its format."""
         return f"{self.reader}('{self.config['path']}')"
 
-    def bytes_written(self, con: DuckDBPyConnection) -> Optional[int]:
+    def bytes_written(self, con: DuckDBPyConnection) -> int | None:
         """
         The size of the file the write left, read by the engine without its content.
 
