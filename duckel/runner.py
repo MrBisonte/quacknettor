@@ -4,8 +4,9 @@ Pipeline execution runner with comprehensive error handling.
 
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from duckdb import DuckDBPyConnection
 
@@ -38,9 +39,9 @@ class PipelineRunner:
     def __init__(
         self,
         pipeline_config: PipelineConfig,
-        overrides: Optional[dict[str, Any]] = None,
+        overrides: dict[str, Any] | None = None,
         pipeline_name: str = "default",
-        progress_callback: Optional[callable] = None,
+        progress_callback: Callable[[int, str], None] | None = None,
         clock: Clock = system_clock,
     ):
         """

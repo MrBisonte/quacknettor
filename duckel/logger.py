@@ -7,11 +7,10 @@ Provides centralized logging configuration with console and file handlers.
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def setup_logger(
-    name: str = "duckel", level: str = "INFO", log_file: Optional[str] = None
+    name: str = "duckel", level: str = "INFO", log_file: str | None = None
 ) -> logging.Logger:
     """
     Configure structured logging for DuckEL.

@@ -1094,8 +1094,7 @@ with tab_obs:
             st.info("Log file exists but is empty. Run a pipeline to generate logs.")
     else:
         st.warning("⚠️ No log file found. Run a pipeline to generate logs.")
-        st.markdown(
-            """
+        st.markdown("""
         **Expected log file**: `duckel.log`
 
         Logs will appear here after you execute a pipeline. Each entry includes:
@@ -1103,8 +1102,7 @@ with tab_obs:
         - **Level** - ERROR, WARNING, INFO, or DEBUG
         - **Component** - Which module generated the log
         - **Message** - Details about the event
-        """
-        )
+        """)
 
 # Footer
 st.divider()

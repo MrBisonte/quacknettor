@@ -4,7 +4,6 @@ DuckDB engine management with proper lifecycle and error handling.
 
 import os
 from contextlib import contextmanager
-from typing import Optional
 
 import duckdb
 
@@ -44,7 +43,7 @@ class DuckDBEngine:
         self.db_path = db_path
         self.threads = threads
         self.memory_limit = memory_limit
-        self.con: Optional[duckdb.DuckDBPyConnection] = None
+        self.con: duckdb.DuckDBPyConnection | None = None
 
     def __enter__(self) -> duckdb.DuckDBPyConnection:
         """Enter context manager - create and configure connection."""

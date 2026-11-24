@@ -86,8 +86,7 @@ def seed_postgres(df: pd.DataFrame, table_name: str = "test_source"):
     cur = conn.cursor()
 
     # Create table
-    cur.execute(
-        f"""
+    cur.execute(f"""
         DROP TABLE IF EXISTS {table_name};
         CREATE TABLE {table_name} (
             id BIGINT PRIMARY KEY,
@@ -98,8 +97,7 @@ def seed_postgres(df: pd.DataFrame, table_name: str = "test_source"):
             timestamp_col TIMESTAMP,
             date_col DATE
         );
-    """
-    )
+    """)
 
     # Insert data
     cols = ["id", "int_col", "float_col", "string_col", "bool_col", "timestamp_col", "date_col"]

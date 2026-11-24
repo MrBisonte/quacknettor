@@ -156,8 +156,7 @@ class TestConfigLoading:
     def test_load_valid_config(self, tmp_path):
         """Test loading valid YAML config."""
         config_file = tmp_path / "pipelines.yml"
-        config_file.write_text(
-            """
+        config_file.write_text("""
 pipelines:
   test_pipeline:
     source:
@@ -168,8 +167,7 @@ pipelines:
       path: ./output.parquet
     options:
       threads: 4
-"""
-        )
+""")
 
         pipelines = load_config(str(config_file))
         assert "test_pipeline" in pipelines
@@ -191,8 +189,7 @@ pipelines:
     def test_load_config_invalid_pipeline(self, tmp_path):
         """Test that invalid pipeline config raises error."""
         config_file = tmp_path / "invalid.yml"
-        config_file.write_text(
-            """
+        config_file.write_text("""
 pipelines:
   bad_pipeline:
     source:
@@ -201,8 +198,7 @@ pipelines:
     target:
       type: parquet
       path: ./output.parquet
-"""
-        )
+""")
 
         with pytest.raises(ValueError, match="Invalid configuration"):
             load_config(str(config_file))

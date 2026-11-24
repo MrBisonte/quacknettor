@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/MrBisonte/quacknettor/actions/workflows/ci.yml/badge.svg)](https://github.com/MrBisonte/quacknettor/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 
 A lightweight, DuckDB-powered **Extract & Load (EL)** tool with **incremental loading**
 (watermark / upsert) and **schema evolution** across Parquet, PostgreSQL, Snowflake, and S3.
