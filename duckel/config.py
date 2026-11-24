@@ -2,84 +2,24 @@
 Configuration loading and validation using Pydantic.
 """
 
-import os
+import json
 import re
 from pathlib import Path
 
 import yaml
-from dotenv import load_dotenv
 
+from .errors import ConfigError
 from .logger import logger
 from .models import PipelineConfig
+from .tokens import resolve_env_tokens, resolve_secret_tokens
 
-# Load environment variables from .env file if it exists
-load_dotenv()
-
-
-def resolve_env_tokens(s: str) -> str:
-    """
-    Replace __ENV:VAR tokens with environment variable values.
-
-    Args:
-        s: String potentially containing __ENV:VAR tokens
-
-    Returns:
-        String with environment variables resolved
-    """
-    if not isinstance(s, str):
-        return s
-
-    pattern = r"__ENV:([A-Z0-9_]+)"
-    matches = re.finditer(pattern, s)
-
-    result = s
-    for match in matches:
-        token = match.group(0)
-        var = match.group(1)
-        value = os.environ.get(var, "")
-        if not value:
-            logger.error(f"Environment variable {var} not found")
-            raise ValueError(f"Required environment variable '{var}' is not set.")
-        result = result.replace(token, value)
-
-    return result
-
-
-def resolve_secret_tokens(s: str) -> str:
-    """
-    Replace SECRET:NAME tokens with environment variable values.
-
-    This is a placeholder for future secret manager integration.
-    Currently resolves from environment variables.
-
-    Args:
-        s: String potentially containing SECRET:NAME tokens
-
-    Returns:
-        String with secrets resolved
-    """
-    if not isinstance(s, str):
-        return s
-
-    pattern = r"SECRET:([A-Z0-9_]+)"
-    matches = re.finditer(pattern, s)
-
-    result = s
-    for match in matches:
-        token = match.group(0)
-        secret_name = match.group(1)
-        # TODO: Integrate with AWS Secrets Manager / Azure Key Vault
-        value = os.environ.get(secret_name, "")
-        if not value:
-            logger.error(f"Secret {secret_name} not found in environment")
-            raise ValueError(f"Required secret '{secret_name}' is not set.")
-
-        # If the entire string is just the token, return the value directly (to preserve type if possible, though here it's still string)
-        if s == token:
-            return value
-        result = result.replace(token, value)
-
-    return result
+__all__ = [
+    "load_config",
+    "resolve_env_tokens",
+    "resolve_secret_tokens",
+    "resolve_tokens_in_dict",
+    "save_pipeline_config",
+]
 
 
 def resolve_tokens_in_dict(d: dict) -> dict:
@@ -114,6 +54,7 @@ def load_config(path: str) -> dict[str, PipelineConfig]:
         Dictionary mapping pipeline names to validated PipelineConfig objects
 
     Raises:
+        ConfigError: If a pipeline names something its source or target cannot do
         ValueError: If configuration is invalid
         FileNotFoundError: If config file doesn't exist
     """
@@ -129,30 +70,42 @@ def load_config(path: str) -> dict[str, PipelineConfig]:
     if "pipelines" not in cfg:
         raise ValueError("Missing top-level 'pipelines' key in configuration")
 
-    import json
-    import re
+    _refuse_plain_text_passwords(cfg)
 
+    # Resolve environment variables and secrets
+    cfg = resolve_tokens_in_dict(cfg)
+
+    # Validate each pipeline configuration
+    validated_pipelines = {
+        name: _validated_pipeline(name, pipeline_dict)
+        for name, pipeline_dict in cfg["pipelines"].items()
+    }
+
+    logger.info(f"Loaded {len(validated_pipelines)} pipelines")
+    return validated_pipelines
+
+
+def _refuse_plain_text_passwords(cfg: dict) -> None:
+    """Raise ValueError when a configuration spells a password out in place of a token."""
     raw_str = json.dumps(cfg)
     if re.search(r"(?i)\b(?:password|pwd)\s*=\s*(?!__ENV:|SECRET:)", raw_str):
         raise ValueError(
             "Plain-text passwords are not allowed in configurations. Use __ENV:VAR or SECRET:VAR instead."
         )
 
-    # Resolve environment variables and secrets
-    cfg = resolve_tokens_in_dict(cfg)
 
-    # Validate each pipeline configuration
-    validated_pipelines = {}
-    for name, pipeline_dict in cfg["pipelines"].items():
-        try:
-            validated_pipelines[name] = PipelineConfig(**pipeline_dict)
-            logger.debug(f"Validated pipeline: {name}")
-        except Exception as e:
-            logger.error(f"Invalid configuration for pipeline '{name}': {e}")
-            raise ValueError(f"Invalid configuration for pipeline '{name}': {e}") from e
-
-    logger.info(f"Loaded {len(validated_pipelines)} pipelines")
-    return validated_pipelines
+def _validated_pipeline(name: str, pipeline_dict: dict) -> PipelineConfig:
+    """One pipeline as a validated PipelineConfig. A refusal carries the pipeline's name."""
+    try:
+        validated = PipelineConfig(**pipeline_dict)
+        logger.debug(f"Validated pipeline: {name}")
+        return validated
+    except ConfigError as e:
+        logger.error(f"Configuration for pipeline '{name}' is refused: {e}")
+        raise ConfigError(e.category, f"Pipeline '{name}': {e.message}", e.hint) from e
+    except Exception as e:
+        logger.error(f"Invalid configuration for pipeline '{name}': {e}")
+        raise ValueError(f"Invalid configuration for pipeline '{name}': {e}") from e
 
 
 def save_pipeline_config(path: str, name: str, config: PipelineConfig) -> None:

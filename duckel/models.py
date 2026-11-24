@@ -7,13 +7,30 @@ Provides type-safe configuration with automatic validation.
 import re
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from .adapters import (
+    DEFAULT_SCHEMA_EVOLUTION,
+    SOURCES,
+    TARGETS,
+    SchemaEvolution,
+    WriteMode,
+    require_mode,
+)
+from .settings import DEFAULT_COMPRESSION, DEFAULT_MEMORY_LIMIT, DEFAULT_THREADS
+
+# The validated names are the keys of the registries in `duckel/adapters.py`: one list.
+# A source or target type with no adapter is refused here, when the configuration loads.
+SourceType = Literal[tuple(SOURCES)]
+TargetType = Literal[tuple(TARGETS)]
+WriteModeName = Literal[tuple(mode.value for mode in WriteMode)]
+SchemaEvolutionName = Literal[tuple(setting.value for setting in SchemaEvolution)]
 
 
 class SourceConfig(BaseModel):
     """Configuration for data source."""
 
-    type: Literal["postgres", "snowflake", "parquet", "csv", "duckdb"]
+    type: SourceType
     path: Optional[str] = None
     conn: Optional[str] = None
     name: Optional[str] = None
@@ -54,17 +71,18 @@ class SourceConfig(BaseModel):
 class TargetConfig(BaseModel):
     """Configuration for data target."""
 
-    type: Literal["postgres", "snowflake", "parquet", "csv"]
+    type: TargetType
     path: Optional[str] = None
     conn: Optional[str] = None
     name: Optional[str] = None
     table: Optional[str] = None
-    mode: Literal["overwrite", "append", "upsert"] = "append"
-    compression: Optional[str] = "zstd"
+    # None means the configuration names no mode: the target then gets the default it declares.
+    mode: Optional[WriteModeName] = None
+    compression: Optional[str] = DEFAULT_COMPRESSION
 
     # Evolution and upsert options
     unique_key: Optional[str] = None
-    schema_evolution: Literal["ignore", "fail", "evolve"] = "ignore"
+    schema_evolution: SchemaEvolutionName = DEFAULT_SCHEMA_EVOLUTION.value
 
     @field_validator("path")
     @classmethod
@@ -99,12 +117,25 @@ class TargetConfig(BaseModel):
             )
         return v
 
+    @model_validator(mode="after")
+    def settle_the_mode(self) -> "TargetConfig":
+        """
+        Give a target with no mode the default it declares, and refuse a mode it does not declare.
+
+        Raises:
+            ConfigError: If the target does not declare the mode
+        """
+        adapter = TARGETS[self.type]
+        named = self.mode or adapter.default_mode.value
+        self.mode = require_mode(self.type, adapter.modes, named).value
+        return self
+
 
 class PipelineOptions(BaseModel):
     """Runtime options for pipeline execution."""
 
-    threads: int = Field(default=4, ge=1, le=64)
-    memory_limit: str = Field(default="2GB", pattern=r"^\d+[KMGT]B$")
+    threads: int = Field(default=DEFAULT_THREADS, ge=1, le=64)
+    memory_limit: str = Field(default=DEFAULT_MEMORY_LIMIT, pattern=r"^\d+[KMGT]B$")
     compute_counts: bool = True
     sample_data: bool = True
     sample_rows: int = Field(default=50, ge=1, le=100000)
@@ -112,7 +143,8 @@ class PipelineOptions(BaseModel):
 
     # New options for incremental and evolution
     full_refresh: bool = False
-    schema_evolution: Literal["ignore", "fail", "evolve"] = "ignore"
+    # None leaves the setting of the target in force. A value wins over it for one run.
+    schema_evolution: Optional[SchemaEvolutionName] = None
     ignore_watermark: bool = False
 
 

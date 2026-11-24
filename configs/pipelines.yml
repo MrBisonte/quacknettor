@@ -67,7 +67,7 @@ pipelines:
     target:
       type: parquet
       path: ./tests/data/target.parquet
-      mode: append
+      mode: overwrite
       schema_evolution: evolve
   custom_parquet_to_postgres:
     source:

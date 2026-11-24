@@ -1,0 +1,25 @@
+# The declaration of this repository for the design scan: the files to scan, their roles, and
+# the exceptions. The scan is scripts/design_check.py of arch-standards, run from a checkout of
+# it. It is not part of this repository. The decision is docs/adr/ADR-0001-design-rules.md.
+
+# The package that moves data. ui/ and scripts/ are outside the scan, see the ADR.
+sources:
+  - duckel/**/*.py
+
+# The one home of the tuning values: threads, memory limit, compression.
+settings:
+  - duckel/settings.py
+
+# The runner decides what lands. It names no engine: each engine has its adapter.
+semantic:
+  - duckel/runner.py
+
+# engine.py opens the DuckDB connection a run is handed. clock.py reads the wall clock a
+# runner is handed.
+edge:
+  - duckel/engine.py
+  - duckel/clock.py
+
+exceptions:
+  - {path: duckel/engine.py, rule: 1, match: "threads=8", reason: a usage example in a docstring}
+  - {path: duckel/engine.py, rule: 1, match: 'memory_limit="4GB', reason: a usage example in a docstring}

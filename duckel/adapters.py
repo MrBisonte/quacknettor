@@ -6,16 +6,193 @@ Provides secure SQL generation with injection protection.
 
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, ClassVar, Optional
 
-from .config import resolve_env_tokens, resolve_secret_tokens
+from duckdb import DuckDBPyConnection
+from duckdb import Error as DuckDBError
+
+from .errors import ConfigError, ConfigErrorCategory
 from .logger import logger
+from .settings import DEFAULT_COMPRESSION
+from .tokens import resolve_env_tokens, resolve_secret_tokens
 
 
 class AdapterError(Exception):
     """Raised when adapter encounters an error."""
 
     pass
+
+
+class WriteMode(str, Enum):
+    """How a write treats the rows the target already holds."""
+
+    OVERWRITE = "overwrite"
+    APPEND = "append"
+    UPSERT = "upsert"
+
+
+def require_mode(target: str, modes: frozenset, mode: str) -> WriteMode:
+    """
+    The write mode a configuration names, when the target declares it.
+
+    Args:
+        target: Target type, for the message
+        modes: The modes the target declares
+        mode: The mode the configuration names
+
+    Returns:
+        The mode as a WriteMode
+
+    Raises:
+        ConfigError: If the target does not declare the mode
+    """
+    if mode not in {m.value for m in modes}:
+        supported = ", ".join(sorted(m.value for m in modes))
+        raise ConfigError(
+            ConfigErrorCategory.UNSUPPORTED_MODE,
+            f"A {target} target does not support mode '{mode}'.",
+            f"Use one of the modes a {target} target supports: {supported}.",
+        )
+    return WriteMode(mode)
+
+
+class SchemaEvolution(str, Enum):
+    """What a run does when the source and the target hold different columns."""
+
+    IGNORE = "ignore"
+    FAIL = "fail"
+    EVOLVE = "evolve"
+
+
+# The setting of a target whose configuration names none. Its one home.
+DEFAULT_SCHEMA_EVOLUTION = SchemaEvolution.IGNORE
+
+
+class Counted(str, Enum):
+    """What a write counts by itself and returns."""
+
+    ROWS = "rows"
+    BYTES = "bytes"
+
+
+@dataclass(frozen=True)
+class WriteReport:
+    """
+    What one write moved, counted by the write itself.
+
+    Attributes:
+        rows: Rows the statement reports it wrote
+        bytes: Size of what was written. None for a target that does not count bytes, and
+            when the size could not be read after the write
+    """
+
+    rows: int
+    bytes: Optional[int]
+
+
+def quote_identifier(name: str) -> str:
+    """A column name as a quoted SQL identifier."""
+    return '"' + name.replace('"', '""') + '"'
+
+
+def column_list(columns: Sequence[str]) -> str:
+    """
+    The columns a write fills, quoted and comma separated.
+
+    Raises:
+        AdapterError: If no column is given, because a write names the columns it fills
+    """
+    if not columns:
+        raise AdapterError(
+            "A write was handed no column to fill. "
+            "Pass the columns of the source relation, see describe_columns()."
+        )
+    return ", ".join(quote_identifier(column) for column in columns)
+
+
+def row_count(counted: Optional[tuple]) -> int:
+    """
+    The row count a write statement returns.
+
+    Args:
+        counted: The one row the statement returned, or None
+
+    Raises:
+        AdapterError: If the statement returned no row count
+    """
+    if not counted or not isinstance(counted[0], int):
+        raise AdapterError(
+            f"The write returned no row count: {counted!r}. "
+            "Run the statement build_write_sql() returns: each one ends by reporting a count."
+        )
+    return counted[0]
+
+
+def describe_columns(con: DuckDBPyConnection, relation_sql: str) -> dict[str, str]:
+    """
+    The columns of a relation and their types, in order.
+
+    Args:
+        con: DuckDB connection the caller opened
+        relation_sql: Any expression a FROM takes
+
+    Returns:
+        Column name to column type. The engine binds the statement and reads no row.
+    """
+    described = con.execute(f"DESCRIBE SELECT * FROM {relation_sql} LIMIT 0").fetchall()
+    return {row[0]: row[1] for row in described}
+
+
+def _named_in(name: str, columns: dict[str, str]) -> bool:
+    """True when a column of that name is among the columns, compared without case."""
+    return name.lower() in {held.lower() for held in columns}
+
+
+def _difference(new: list, gone: list) -> str:
+    """The columns a source and a target do not share, as one clause."""
+    clauses = []
+    if new:
+        clauses.append(f"the source has columns {new} that are missing in the target")
+    if gone:
+        clauses.append(f"the target has columns {gone} that are missing in the source")
+    return " and ".join(clauses)
+
+
+def file_size_sql(path: str) -> str:
+    """The statement that reads the size of one file, and no other column of it."""
+    return f"SELECT size FROM read_blob('{path}')"
+
+
+def copy_sql(relation_sql: str, columns: Sequence[str], path: str, options: str) -> str:
+    """The statement that writes the named columns of a relation to one file."""
+    return f"COPY (SELECT {column_list(columns)} FROM {relation_sql}) TO '{path}' ({options});"
+
+
+def overwrite_sql(table: str, relation_sql: str, columns: Sequence[str]) -> str:
+    """The statements that drop a table and create it again from the named columns."""
+    return (
+        f"DROP TABLE IF EXISTS {table};\n"
+        f"CREATE TABLE {table} AS SELECT {column_list(columns)} FROM {relation_sql};"
+    )
+
+
+def append_sql(table: str, relation_sql: str, columns: Sequence[str]) -> str:
+    """The statement that adds rows to a table, column by name."""
+    names = column_list(columns)
+    return f"INSERT INTO {table} ({names}) SELECT {names} FROM {relation_sql};"
+
+
+def upsert_sql(table: str, relation_sql: str, columns: Sequence[str]) -> str:
+    """
+    The statement that adds rows to a table and replaces the rows whose key it already holds.
+
+    It is DuckDB's own upsert syntax. The key is the primary key of the target table.
+    """
+    names = column_list(columns)
+    return f"INSERT OR REPLACE INTO {table} ({names}) SELECT {names} FROM {relation_sql};"
 
 
 class Adapter(ABC):
@@ -213,142 +390,284 @@ class SnowflakeSourceAdapter(SourceAdapter):
 class TargetAdapter(Adapter):
     """Base class for target adapters."""
 
+    # The write modes this target supports, declared as data by each target. A configuration
+    # that names any other mode is refused when it loads, see `TargetConfig` in models.py.
+    modes: ClassVar[frozenset[WriteMode]]
+
+    # The mode of a target whose configuration names none, declared as data by each target.
+    default_mode: ClassVar[WriteMode]
+
+    # What a write to this target counts and returns, declared as data by each target.
+    counts: ClassVar[frozenset[Counted]]
+
+    def __init__(self, config: dict):
+        super().__init__(config)
+        # A target built from a plain dict never passed `TargetConfig`, so it is checked here too.
+        self.mode = require_mode(
+            config.get("type") or type(self).__name__,
+            self.modes,
+            config.get("mode") or self.default_mode.value,
+        )
+
     @abstractmethod
     def attach(self, con):
         """Attach target to DuckDB connection if needed."""
         pass
 
     @abstractmethod
-    def build_write_sql(self, relation_sql: str) -> str:
-        """Build SQL to write data to target."""
+    def build_write_sql(self, relation_sql: str, columns: Sequence[str]) -> str:
+        """Build SQL to write the named columns of a relation to the target."""
         pass
 
-    def sync_schema(self, con, relation_sql: str, evolution_override: Optional[str] = None):
-        """
-        Synchronize target schema with source schema.
+    @abstractmethod
+    def bytes_written(self, con: DuckDBPyConnection) -> Optional[int]:
+        """Bytes the last write moved, or None when this target has no count to give."""
+        pass
 
-        This method now performs proactive validation:
-        1. Checks if target table exists (required for append/upsert)
-        2. Compares schemas and provides actionable error messages
+    def write(self, con: DuckDBPyConnection, write_sql: str) -> WriteReport:
+        """
+        Run a statement built by `build_write_sql` in a transaction and return what it moved.
+
+        The bytes are read after the commit, so a size that cannot be read never undoes a write.
+
+        Args:
+            con: DuckDB connection the caller opened
+            write_sql: Statement from `build_write_sql`
+
+        Returns:
+            The rows the statement reports, and the bytes this target counts
+
+        Raises:
+            AdapterError: If the statement returns no row count. The transaction is rolled back.
+        """
+        con.execute("BEGIN TRANSACTION;")
+        try:
+            rows = row_count(con.execute(write_sql).fetchone())
+            con.execute("COMMIT;")
+        except Exception as e:
+            logger.error(f"Write failed, rolling back transaction: {e}")
+            con.execute("ROLLBACK;")
+            raise
+        return WriteReport(rows=rows, bytes=self.bytes_written(con))
+
+    @abstractmethod
+    def relation(self) -> str:
+        """An expression a FROM takes that reads the target back."""
+        pass
+
+    def keeps_rows(self) -> bool:
+        """True when the write keeps the rows the target holds. An overwrite recreates it."""
+        return self.mode is not WriteMode.OVERWRITE
+
+    def existing_columns(self, con: DuckDBPyConnection) -> Optional[dict[str, str]]:
+        """The columns the target holds and their types, or None when the engine finds no target."""
+        try:
+            return describe_columns(con, self.relation())
+        except DuckDBError:
+            return None
+
+    def sync_schema(
+        self, con: DuckDBPyConnection, relation_sql: str, evolution_override: Optional[str] = None
+    ) -> list[str]:
+        """
+        Compare the source with the target, apply `schema_evolution`, return the columns to fill.
+
+        A write that recreates the target fills every source column. A write that keeps the rows
+        of the target fills the source columns the target holds. Names are compared without
+        case, as the engine binds them.
 
         Args:
             con: DuckDB connection
             relation_sql: Source relation SQL
-            evolution_override: Optional override for schema evolution mode
+            evolution_override: The setting for this run, in place of the target's own
+
+        Returns:
+            The columns the write names, in the order of the source
+
+        Raises:
+            AdapterError: If the setting is `fail` and the columns differ, if an append or an
+                upsert finds no target, or if a column cannot be added
         """
-        evolution = evolution_override or self.config.get("schema_evolution", "ignore")
-        mode = self.config.get("mode", "append")
+        named = evolution_override or self.config.get("schema_evolution")
+        evolution = SchemaEvolution(named or DEFAULT_SCHEMA_EVOLUTION.value)
+        held = self.existing_columns(con)
+        source = describe_columns(con, relation_sql)
+        if held is None:
+            self._refuse_to_keep_the_rows_of_no_target()
+            return list(source)
 
-        # Construct full table name
-        target_table = self.config.get("table")
-        if not target_table:
-            # Table is missing. In overwrite mode, this is acceptable during validation/attachment.
-            # However, building write SQL will eventually require it.
+        new = {name: kind for name, kind in source.items() if not _named_in(name, held)}
+        gone = [name for name in held if not _named_in(name, source)]
+        if new or gone:
+            self._settle(con, evolution, new, gone)
+        if self.keeps_rows() and evolution is not SchemaEvolution.EVOLVE:
+            return [name for name in source if name not in new]
+        return list(source)
+
+    def _refuse_to_keep_the_rows_of_no_target(self) -> None:
+        """Raise AdapterError when an append or an upsert finds no target to keep the rows of."""
+        if self.keeps_rows():
+            raise AdapterError(
+                f"Target table '{self.relation()}' not found in {self.config.get('type')}. "
+                "Suggestion: Use 'mode: overwrite' for your first run to bootstrap the table "
+                "structure, or create the table manually in the target database."
+            )
+
+    def _settle(
+        self, con: DuckDBPyConnection, evolution: SchemaEvolution, new: dict[str, str], gone: list
+    ) -> None:
+        """Apply the setting to a source and a target that hold different columns."""
+        mismatch = f"Schema mismatch on '{self.relation()}': {_difference(list(new), gone)}."
+        if evolution is SchemaEvolution.FAIL:
+            raise AdapterError(
+                f"{mismatch} Pipeline aborted because schema_evolution is set to 'fail'."
+            )
+        if evolution is SchemaEvolution.EVOLVE:
+            if self.keeps_rows():
+                self._add_columns(con, new)
+            logger.warning(f"{mismatch} schema_evolution is 'evolve'. {self._outcome(evolution)}")
             return
+        if evolution is SchemaEvolution.IGNORE:
+            logger.warning(f"{mismatch} schema_evolution is 'ignore'. {self._outcome(evolution)}")
+            return
+        raise AdapterError(f"schema_evolution '{evolution.value}' is not handled by a target.")
 
-        target_name = target_table
-        adapter_type = self.config.get("type", "database")
-        if hasattr(self, "config") and "name" in self.config:
-            target_name = f"{self.config['name']}.{target_name}"
+    def _outcome(self, evolution: SchemaEvolution) -> str:
+        """What the run does next with the columns the two sides do not share."""
+        if not self.keeps_rows():
+            return "The run continues: the target is replaced and takes the columns of the source."
+        absent = "A target column the source lacks is filled with NULL."
+        if evolution is SchemaEvolution.EVOLVE:
+            return f"The run continues: a source column the target lacks is added. {absent}"
+        return f"The run continues: a source column the target lacks is not loaded. {absent}"
 
-        # Step 1: Check if target table exists
-        tgt_cols = {}
-        try:
-            tgt_desc = con.execute(f"DESCRIBE {target_name}").fetchall()
-            tgt_cols = {r[0]: r[1] for r in tgt_desc}
-        except Exception:
-            # Table does not exist.
-            # If mode requires existing table, fail immediately with actionable message
-            if mode in ("append", "upsert"):
+    def _add_columns(self, con: DuckDBPyConnection, new: dict[str, str]) -> None:
+        """Add the columns the source has gained to a target that keeps its rows."""
+        target = self.relation()
+        for col, dtype in new.items():
+            try:
+                con.execute(f"ALTER TABLE {target} ADD COLUMN {quote_identifier(col)} {dtype}")
+            except Exception as e:
+                logger.error(f"Failed to add column {col}: {e}")
                 raise AdapterError(
-                    f"Target table '{target_name}' not found in {adapter_type}. "
-                    f"Suggestion: Use 'mode: overwrite' for your first run to bootstrap the table structure, "
-                    f"or create the table manually in the target database."
-                )
-            # For overwrite mode, table will be created - no error needed
-            return
+                    f"Schema evolution failed while adding column '{col}': {e}"
+                ) from e
 
-        # Step 2: Compare schemas (always do this if table exists)
+
+class FileTargetAdapter(TargetAdapter):
+    """
+    A target that is one file, written by COPY ... TO.
+
+    The statement replaces the file, so overwrite is the one mode a file target declares.
+    """
+
+    modes = frozenset({WriteMode.OVERWRITE})
+    default_mode = WriteMode.OVERWRITE
+    counts = frozenset({Counted.ROWS, Counted.BYTES})
+
+    # The DuckDB function that reads this file format back, declared by each format.
+    reader: ClassVar[str]
+
+    def attach(self, con):
+        """No attachment needed for a file."""
+        pass
+
+    def relation(self) -> str:
+        """The file, read back by the function of its format."""
+        return f"{self.reader}('{self.config['path']}')"
+
+    def bytes_written(self, con: DuckDBPyConnection) -> Optional[int]:
+        """
+        The size of the file the write left, read by the engine without its content.
+
+        Returns None, with a warning, when the engine cannot read the size. The rows are
+        committed by then, so the run goes on and reports no byte count.
+        """
+        path = self.config["path"]
         try:
-            src_desc = con.execute(f"DESCRIBE SELECT * FROM {relation_sql} LIMIT 0").fetchall()
-            src_cols = {r[0]: r[1] for r in src_desc}
+            found = con.execute(file_size_sql(path)).fetchone()
         except Exception as e:
-            logger.warning(f"Could not describe source for schema comparison: {e}")
-            return
-
-        # Find columns in source that are missing in target
-        missing_cols = {k: v for k, v in src_cols.items() if k not in tgt_cols}
-
-        if missing_cols:
-            missing_list = list(missing_cols.keys())
-
-            if evolution == "fail":
-                raise AdapterError(
-                    f"Schema mismatch: Source has columns {missing_list} that are missing in target '{target_name}'. "
-                    f"Pipeline aborted because schema_evolution is set to 'fail'."
-                )
-            elif evolution == "evolve":
-                logger.info(f"Evolving schema for {target_name}. Adding columns: {missing_list}")
-                for col, dtype in missing_cols.items():
-                    try:
-                        con.execute(f'ALTER TABLE {target_name} ADD COLUMN "{col}" {dtype}')
-                    except Exception as e:
-                        logger.error(f"Failed to add column {col}: {e}")
-                        raise AdapterError(
-                            f"Schema evolution failed while adding column '{col}': {e}"
-                        ) from e
-            else:
-                # evolution == "ignore" - but we still warn with actionable message
-                raise AdapterError(
-                    f"Schema mismatch: Source has columns {missing_list} that are missing in target '{target_name}'. "
-                    f"Suggestion: Set 'schema_evolution: evolve' to add these columns automatically, "
-                    f"or use 'mode: overwrite' to recreate the table with the new schema."
-                )
+            logger.warning(f"The size of '{path}' could not be read after the write: {e}")
+            return None
+        if not found:
+            logger.warning(f"No file was found at '{path}' after the write: no byte count.")
+            return None
+        return found[0]
 
 
-class ParquetTargetAdapter(TargetAdapter):
+class DatabaseTargetAdapter(TargetAdapter):
+    """
+    A target that is a table in a database attached to DuckDB.
+
+    The engine reports the rows of an insert and no byte count, so `counts` holds rows only.
+    """
+
+    default_mode = WriteMode.APPEND
+    counts = frozenset({Counted.ROWS})
+
+    # The name in messages, and the attachment alias when the configuration gives none.
+    label: ClassVar[str]
+    default_alias: ClassVar[str]
+
+    def bytes_written(self, con: DuckDBPyConnection) -> None:
+        """A database target does not count bytes."""
+        return None
+
+    def alias(self) -> str:
+        """The name the database is attached under: the configured one, or this target's default."""
+        return self._sanitize_identifier(self.config.get("name") or self.default_alias)
+
+    def relation(self) -> str:
+        """The target table, as the write names it."""
+        return self.full_table()
+
+    def full_table(self) -> str:
+        """The target table, qualified by the attachment alias."""
+        table_name = self.config.get("table")
+        if not table_name:
+            raise ValueError(f"{self.label} target requires 'table' for write operations")
+        return f"{self.alias()}.{self._sanitize_identifier(table_name)}"
+
+
+class ParquetTargetAdapter(FileTargetAdapter):
     """Adapter for Parquet file targets."""
+
+    reader = "read_parquet"
 
     def validate(self):
         if "path" not in self.config:
             raise ValueError("Parquet target requires 'path'")
 
-    def attach(self, con):
-        """No attachment needed for Parquet files."""
-        pass
-
-    def sync_schema(self, con, relation_sql: str, evolution_override: Optional[str] = None):
-        """Schema evolution not supported for Parquet files (yet)."""
-        pass
-
-    def build_write_sql(self, relation_sql: str) -> str:
+    def build_write_sql(self, relation_sql: str, columns: Sequence[str]) -> str:
         path = self.config["path"]
-        compression = self.config.get("compression", "zstd")
+        compression = self.config.get("compression") or DEFAULT_COMPRESSION
 
         logger.debug(f"Writing Parquet to: {path}")
         # Use COPY TO for optimal performance
-        return f"COPY (SELECT * FROM {relation_sql}) TO '{path}' (FORMAT parquet, COMPRESSION {compression});"
+        return copy_sql(relation_sql, columns, path, f"FORMAT parquet, COMPRESSION {compression}")
 
 
-class CSVTargetAdapter(TargetAdapter):
+class CSVTargetAdapter(FileTargetAdapter):
     """Adapter for CSV file targets."""
+
+    reader = "read_csv_auto"
 
     def validate(self):
         if "path" not in self.config:
             raise ValueError("CSV target requires 'path'")
 
-    def attach(self, con):
-        """No attachment needed for CSV files."""
-        pass
-
-    def build_write_sql(self, relation_sql: str) -> str:
+    def build_write_sql(self, relation_sql: str, columns: Sequence[str]) -> str:
         path = self.config["path"]
         logger.debug(f"Writing CSV to: {path}")
-        return f"COPY (SELECT * FROM {relation_sql}) TO '{path}' (HEADER, DELIMITER ',');"
+        return copy_sql(relation_sql, columns, path, "HEADER, DELIMITER ','")
 
 
-class PostgresTargetAdapter(TargetAdapter):
+class PostgresTargetAdapter(DatabaseTargetAdapter):
     """Adapter for Postgres targets."""
+
+    modes = frozenset({WriteMode.OVERWRITE, WriteMode.APPEND, WriteMode.UPSERT})
+    label = "Postgres"
+    default_alias = "pg_target_attachment"
 
     def validate(self):
         if "conn" not in self.config:
@@ -358,7 +677,7 @@ class PostgresTargetAdapter(TargetAdapter):
 
     def attach(self, con):
         """Attach Postgres database to DuckDB with categorized error handling."""
-        name = self._sanitize_identifier(self.config.get("name", "pg_target_attachment"))
+        name = self.alias()
         conn_str = resolve_env_tokens(self.config["conn"])
         conn_str = resolve_secret_tokens(conn_str)
 
@@ -389,45 +708,31 @@ class PostgresTargetAdapter(TargetAdapter):
             else:
                 raise AdapterError(f"Failed to attach Postgres database '{name}': {e}") from e
 
-    def build_write_sql(self, relation_sql: str) -> str:
-        name = self._sanitize_identifier(self.config.get("name", "pg_target_attachment"))
-        table_name = self.config.get("table")
-        if not table_name:
-            raise ValueError("Postgres target requires 'table' for write operations")
-
-        table = self._sanitize_identifier(table_name)
-        mode = self.config.get("mode", "append")
+    def build_write_sql(self, relation_sql: str, columns: Sequence[str]) -> str:
+        full_table = self.full_table()
         unique_key = self.config.get("unique_key")
 
-        # Prefix table with attachment name if not already qualified
-        if "." in table:
-            full_table = f"{name}.{table}"
-        else:
-            full_table = f"{name}.{table}"
-
-        if mode == "overwrite":
+        if self.mode is WriteMode.OVERWRITE:
             logger.info(f"Overwriting table: {full_table}")
-            return f"""
-            DROP TABLE IF EXISTS {full_table};
-            CREATE TABLE {full_table} AS SELECT * FROM {relation_sql};
-            """
-        elif mode == "upsert":
+            return overwrite_sql(full_table, relation_sql, columns)
+        if self.mode is WriteMode.UPSERT:
             if not unique_key:
                 raise ValueError("Upsert requires 'unique_key' configuration")
 
             logger.info(f"Upserting to table: {full_table} using key: {unique_key}")
-            # DuckDB via Postgres attachment handles INSERT OR REPLACE as standard insert or specialized logic?
-            # Safe bet with DuckDB's postgres scanner is standard SQL passed.
-            # But standard PG needs `ON CONFLICT`.
-            # We'll use DuckDB's `INSERT OR REPLACE INTO` which is the dedicated upsert syntax
-            return f"INSERT OR REPLACE INTO {full_table} SELECT * FROM {relation_sql};"
-        else:
+            return upsert_sql(full_table, relation_sql, columns)
+        if self.mode is WriteMode.APPEND:
             logger.info(f"Appending to table: {full_table}")
-            return f"INSERT INTO {full_table} SELECT * FROM {relation_sql};"
+            return append_sql(full_table, relation_sql, columns)
+        raise AdapterError(f"A postgres target builds no statement for mode '{self.mode.value}'.")
 
 
-class SnowflakeTargetAdapter(TargetAdapter):
+class SnowflakeTargetAdapter(DatabaseTargetAdapter):
     """Adapter for Snowflake targets."""
+
+    modes = frozenset({WriteMode.OVERWRITE, WriteMode.APPEND})
+    label = "Snowflake"
+    default_alias = "sf_target_attachment"
 
     def validate(self):
         if "conn" not in self.config:
@@ -436,7 +741,7 @@ class SnowflakeTargetAdapter(TargetAdapter):
 
     def attach(self, con):
         """Attach Snowflake database to DuckDB with categorized error handling."""
-        name = self._sanitize_identifier(self.config.get("name", "sf_target_attachment"))
+        name = self.alias()
         conn_str = resolve_env_tokens(self.config["conn"])
         conn_str = resolve_secret_tokens(conn_str)
 
@@ -472,30 +777,36 @@ class SnowflakeTargetAdapter(TargetAdapter):
             else:
                 raise AdapterError(f"Failed to attach Snowflake database '{name}': {e}") from e
 
-    def build_write_sql(self, relation_sql: str) -> str:
-        name = self._sanitize_identifier(self.config.get("name", "sf_target_attachment"))
-        table_name = self.config.get("table")
-        if not table_name:
-            raise ValueError("Snowflake target requires 'table' for write operations")
+    def build_write_sql(self, relation_sql: str, columns: Sequence[str]) -> str:
+        full_table = self.full_table()
 
-        table = self._sanitize_identifier(table_name)
-        mode = self.config.get("mode", "append")
-
-        # Construct fully qualified table name
-        if "." in table:
-            full_table = f"{name}.{table}"
-        else:
-            full_table = f"{name}.{table}"
-
-        if mode == "overwrite":
+        if self.mode is WriteMode.OVERWRITE:
             logger.info(f"Overwriting Snowflake table: {full_table}")
-            return f"""
-            DROP TABLE IF EXISTS {full_table};
-            CREATE TABLE {full_table} AS SELECT * FROM {relation_sql};
-            """
-        else:
+            return overwrite_sql(full_table, relation_sql, columns)
+        if self.mode is WriteMode.APPEND:
             logger.info(f"Appending to Snowflake table: {full_table}")
-            return f"INSERT INTO {full_table} SELECT * FROM {relation_sql};"
+            return append_sql(full_table, relation_sql, columns)
+        raise AdapterError(f"A snowflake target builds no statement for mode '{self.mode.value}'.")
+
+
+# ===== REGISTRIES =====
+# Sources and targets are open sets. A new member is one row here plus one adapter class.
+# `duckel/models.py` validates `type` against these keys, so a name with no adapter is refused
+# when the configuration loads.
+
+SOURCES: dict[str, type[SourceAdapter]] = {
+    "parquet": ParquetSourceAdapter,
+    "csv": CSVSourceAdapter,
+    "postgres": PostgresSourceAdapter,
+    "snowflake": SnowflakeSourceAdapter,
+}
+
+TARGETS: dict[str, type[TargetAdapter]] = {
+    "parquet": ParquetTargetAdapter,
+    "csv": CSVTargetAdapter,
+    "postgres": PostgresTargetAdapter,
+    "snowflake": SnowflakeTargetAdapter,
+}
 
 
 # ===== FACTORY FUNCTIONS =====
@@ -516,17 +827,10 @@ def create_source_adapter(config: dict) -> SourceAdapter:
     """
     source_type = config.get("type")
 
-    adapters = {
-        "parquet": ParquetSourceAdapter,
-        "csv": CSVSourceAdapter,
-        "postgres": PostgresSourceAdapter,
-        "snowflake": SnowflakeSourceAdapter,
-    }
-
-    if source_type not in adapters:
+    if source_type not in SOURCES:
         raise ValueError(f"Unsupported source type: {source_type}")
 
-    return adapters[source_type](config)
+    return SOURCES[source_type](config)
 
 
 def create_target_adapter(config: dict) -> TargetAdapter:
@@ -544,17 +848,10 @@ def create_target_adapter(config: dict) -> TargetAdapter:
     """
     target_type = config.get("type")
 
-    adapters = {
-        "parquet": ParquetTargetAdapter,
-        "csv": CSVTargetAdapter,
-        "postgres": PostgresTargetAdapter,
-        "snowflake": SnowflakeTargetAdapter,
-    }
-
-    if target_type not in adapters:
+    if target_type not in TARGETS:
         raise ValueError(f"Unsupported target type: {target_type}")
 
-    return adapters[target_type](config)
+    return TARGETS[target_type](config)
 
 
 # ===== LEGACY COMPATIBILITY FUNCTIONS =====
@@ -571,11 +868,11 @@ def build_source_relation_sql(source: dict) -> str:
     return adapter.get_relation_sql()
 
 
-def build_target_write_sql(target: dict, relation_sql: str) -> str:
+def build_target_write_sql(target: dict, relation_sql: str, columns: Sequence[str]) -> str:
     """
     Legacy function for backward compatibility.
 
     Use create_target_adapter() instead.
     """
     adapter = create_target_adapter(target)
-    return adapter.build_write_sql(relation_sql)
+    return adapter.build_write_sql(relation_sql, columns)

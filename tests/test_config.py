@@ -63,7 +63,7 @@ class TestTargetConfig:
         config = TargetConfig(type="parquet", path="./output.parquet")
         assert config.type == "parquet"
         assert config.path == "./output.parquet"
-        assert config.mode == "append"  # default
+        assert config.mode == "overwrite"  # the default a file target declares
 
     def test_parquet_target_with_mode(self):
         """Test Parquet target with mode."""
@@ -79,7 +79,7 @@ class TestTargetConfig:
 
         # But it SHOULD raise when trying to write
         with pytest.raises(ValueError, match="requires 'table'"):
-            adapter.build_write_sql("source_data")
+            adapter.build_write_sql("source_data", ("id",))
 
     def test_invalid_mode(self):
         """Test that invalid mode is rejected."""

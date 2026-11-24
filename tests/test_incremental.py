@@ -20,7 +20,7 @@ def test_incremental_flow(tmp_path):
 
     config = {
         "source": {"type": "parquet", "path": src_path, "incremental_key": "updated_at"},
-        "target": {"type": "parquet", "path": tgt_path, "mode": "append"},
+        "target": {"type": "parquet", "path": tgt_path, "mode": "overwrite"},
         "options": {"compute_counts": True, "sample_data": False},
     }
 

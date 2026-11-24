@@ -17,6 +17,9 @@ from duckel.adapters import (
     create_target_adapter,
 )
 
+# The columns a write is handed in these tests.
+COLUMNS = ("id", "name")
+
 
 class TestAdapterBase:
     """Test base adapter functionality."""
@@ -155,7 +158,7 @@ class TestParquetTargetAdapter:
         adapter = ParquetTargetAdapter(
             {"type": "parquet", "path": "./output.parquet", "compression": "zstd"}
         )
-        sql = adapter.build_write_sql("source_data")
+        sql = adapter.build_write_sql("source_data", COLUMNS)
 
         assert "COPY" in sql
         assert "source_data" in sql
@@ -176,7 +179,7 @@ class TestPostgresTargetAdapter:
 
         # but required for write
         with pytest.raises(ValueError, match="requires 'table'"):
-            adapter.build_write_sql("source_data")
+            adapter.build_write_sql("source_data", COLUMNS)
 
     def test_sql_injection_in_table(self):
         """Test that SQL injection in table name is blocked."""
@@ -193,7 +196,7 @@ class TestPostgresTargetAdapter:
         adapter = PostgresTargetAdapter(
             {"type": "postgres", "conn": "test", "table": "users", "mode": "overwrite"}
         )
-        sql = adapter.build_write_sql("source_data")
+        sql = adapter.build_write_sql("source_data", COLUMNS)
 
         assert "DROP TABLE IF EXISTS" in sql
         assert "CREATE TABLE" in sql
@@ -204,7 +207,7 @@ class TestPostgresTargetAdapter:
         adapter = PostgresTargetAdapter(
             {"type": "postgres", "conn": "test", "table": "users", "mode": "append"}
         )
-        sql = adapter.build_write_sql("source_data")
+        sql = adapter.build_write_sql("source_data", COLUMNS)
 
         assert "INSERT INTO" in sql
         assert "pg_target_attachment.users" in sql

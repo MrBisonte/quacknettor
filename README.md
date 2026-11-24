@@ -17,7 +17,7 @@ A lightweight, DuckDB-powered **Extract & Load (EL)** tool with **incremental lo
 ## What it does
 
 - **Incremental loading** — track a watermark column (e.g. `updated_at`) to move only new or
-  changed rows, in `append` or `upsert` mode.
+  changed rows, in `append` mode on a database target, or `upsert` on Postgres.
 - **Schema evolution** — detect source schema changes and evolve the target (e.g. add missing
   columns) instead of failing.
 - **Adapters** — PostgreSQL, Snowflake, and Parquet/CSV (local or S3), all driven through DuckDB.
@@ -104,6 +104,10 @@ cp configs/templates/.env.example .env
 
 `.env` is gitignored and is never committed.
 
+A target supports the write modes its adapter declares, `modes` in `duckel/adapters.py`. A mode a
+target does not support is refused when the configuration loads, and the message names the modes
+that target does support. A target that sets no mode gets the default its adapter declares.
+
 ## Usage
 
 1. **Select a pipeline** from `configs/pipelines.yml`.
@@ -121,7 +125,7 @@ ui/main.py         Streamlit application
 configs/           Pipeline definitions and environment templates
 scripts/           Utilities (test-data generation, local Postgres, benchmark)
 tests/             Unit tests + a Docker/Snowflake-gated integration matrix
-docs/              Naming conventions and notes
+docs/              Naming conventions, notes and decision records (docs/adr)
 ops/               Operations runbook
 ```
 
@@ -149,6 +153,22 @@ pytest tests/integration -m "integration and not snowflake" -v
 | **Snowflake** | ✓ | ✓ | ✓ | ✓ |
 
 CI runs Ruff, Black, the unit tests, and a pip-audit security scan on every push and pull request.
+
+## Design rules
+
+Design follows `arch-standards/code/design/SPEC.md`. The open sets are the sources and the
+targets, and their registries are `SOURCES` and `TARGETS` in `duckel/adapters.py`.
+
+The design scan is `scripts/design_check.py` of arch-standards. It is not part of this repository
+and CI does not run it. It reads `.design.yaml` at the root of this repository, and runs from a
+checkout of arch-standards, whose path is `ARCH_STANDARDS`:
+
+```bash
+python "$ARCH_STANDARDS/scripts/design_check.py" .   # exits 0 when the package conforms
+```
+
+The decision, the scan's declaration and what does not conform yet are recorded in
+[docs/adr/ADR-0001-design-rules.md](docs/adr/ADR-0001-design-rules.md).
 
 ## Roadmap and limitations
 

@@ -10,10 +10,19 @@ import subprocess
 import time
 from pathlib import Path
 
+import duckdb
 import pytest
 
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
+
+
+@pytest.fixture
+def con():
+    """DuckDB in process with no extension loaded: the engine a unit test drives a write through."""
+    connection = duckdb.connect()
+    yield connection
+    connection.close()
 
 
 @pytest.fixture(scope="session")
