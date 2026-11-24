@@ -8,7 +8,8 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    # Python 3.9 has no build for Ubuntu 26.04, the image ubuntu-latest names.
+    runs-on: ubuntu-24.04
     
     steps:
     - uses: actions/checkout@v4
