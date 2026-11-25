@@ -771,10 +771,8 @@ with tab_run:
         style T fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#064E3B
     """
 
-    # Render using html component since st.markdown doesn't support mermaid locally
-    import streamlit.components.v1 as components
-
-    components.html(
+    # Render in an iframe, since st.markdown does not draw mermaid.
+    st.iframe(
         f"""
         <script type="module">
             import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
@@ -785,6 +783,7 @@ with tab_run:
         </div>
         """,
         height=200,
+        alt="Pipeline flow diagram",
     )
 
     # Display config snippet
